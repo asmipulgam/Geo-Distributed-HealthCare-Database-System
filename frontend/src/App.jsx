@@ -1,0 +1,29 @@
+import Login from './components/Login'
+import { BrowserRouter as Router, Routes, Route, Link, useParams, Navigate } from "react-router-dom";
+import ErrorPage from "./components/ErrorPage.jsx";
+
+function App() {
+
+   return(
+       <div style={{width: "100vw", height: "100vh", alignItems: "center"}}>
+
+           <Router>
+               <Routes>
+                   {/* Default route redirects to /login */}
+                   <Route path="/" element={<Navigate to="/login" replace />} />
+
+                   {/* Actual routes */}
+                   <Route path="/login" element={<Login />} />
+                   {/*<Route path="/customer_data" element={<CustomerData />} />*/}
+                   {/*<Route path="/agent/:region" element={<Agent />} />*/}
+                   {/*<Route path="/analytics" element={<Analytics />} />*/}
+
+                   {/* Fallback route */}
+                   <Route path="*" element={<ErrorPage />} />
+               </Routes>
+           </Router>
+       </div>
+   );
+}
+
+export default App
