@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import '../login.css'
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
 
 function isDigits(str) {
   return /^\d+$/.test(str)
@@ -27,10 +28,11 @@ function parseYYYYMMDD(str) {
 }
 
 
-export default function Login({ onLogin }) {
+export default function Login() {
   const [step, setStep] = useState(1)
     const [userData, setUserData] = useState({});
   const [isLoading, setIsLoading] = useState(false);
+    const navigate = useNavigate();
 
   // Step 1: Health ID
   const [healthId, setHealthId] = useState('')
@@ -92,13 +94,8 @@ export default function Login({ onLogin }) {
     setDobTouched(true)
     if (!dobError && parsedDob) {
       setSubmitted(true)
-      const payload = {
-        healthId,
-        dob: parsedDob.toISOString().slice(0, 10), // YYYY-MM-DD
-      }
-      if (typeof onLogin === 'function') {
-        onLogin(payload)
-      }
+        navigate("/details", { state: { user: userData } });
+
     }
   }
 
