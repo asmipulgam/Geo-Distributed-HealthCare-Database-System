@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import "tailwindcss/index.css"
 
 export default function Admin() {
     const [formData, setFormData] = useState({
@@ -55,12 +56,12 @@ export default function Admin() {
 
             <form
                 onSubmit={handleSubmit}
-                className="w-full max-w-md bg-gray-900 p-6 rounded-2xl shadow-lg border border-gray-800 space-y-4"
+                className="w-full max-w-md  p-6 rounded-2xl shadow-lg border bg-green-300 space-y-4"
             >
                 {Object.keys(formData).map((field) => (
                     <div key={field} className="flex flex-col">
-                        <label htmlFor={field} className="capitalize mb-1 text-gray-300">
-                            {field}
+                        <label htmlFor={field} className="capitalize mb-1 text-blue-700">
+                            {field}:
                         </label>
                         <input
                             id={field}
@@ -68,7 +69,8 @@ export default function Admin() {
                             type="text"
                             value={formData[field]}
                             onChange={handleChange}
-                            className="bg-black border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-white"
+                            style={{marginLeft: "40px",marginRight: "40px"}}
+                            className="bg-white border border-blue-400 rounded-lg p-2 text-white"
                         />
                     </div>
                 ))}

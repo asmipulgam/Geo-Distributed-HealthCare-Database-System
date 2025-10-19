@@ -12,9 +12,11 @@ export default function Agent() {
     const fetchRecords = async (cursor = null, dir = "next") => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/all?region=${region}&cursor=${cursor || "0"}&dir=${dir}`, {})
+            // const res = await fetch(`/api/all?region=${region}&cursor=${cursor || "0"}&dir=${dir}`, {})
+            //
+            // const data = await res.json();
 
-            const data = await res.json();
+            const data = {records: {prevIndex: 0,nextIndex: 0}}
 
             setRecords(data.records || []);
             setNextCursor(data.records.nextIndex || null);

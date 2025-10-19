@@ -14,3 +14,11 @@ The React Compiler is not enabled on this template because of its impact on dev 
 ## Expanding the ESLint configuration
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+
+Screens
+
+1) Admin -> Able to add new data. Todo: View all regions data, delete a data 
+2) Agent -> View all data of that particular region. Todo: Ability to delete data
+3) CustomerData -> Just View Customer Info
+4) ErrorPage -> Generic Page for invalid URL
+5) Login -> Login Screen

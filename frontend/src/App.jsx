@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Link, useParams, Navigate } fro
 import ErrorPage from "./components/ErrorPage.jsx";
 import CustomerData from "./components/CustomerData.jsx";
 import Agent from "./components/AgentScreen.jsx";
+import Admin from "./components/Admin.jsx";
 
 function App() {
 
@@ -18,6 +19,7 @@ function App() {
                    <Route path="/login" element={<Login />} />
                    <Route path="/customerdetails" element={<CustomerData />} />
                    <Route path="/agent/:region" element={<Agent />} />
+                   <Route path="/admin" element={<Admin />} />
                    {/*<Route path="/analytics" element={<Analytics />} />*/}
 
                    {/* Fallback route */}
