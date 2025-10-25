@@ -44,6 +44,67 @@ export default function Login() {
     return null
   }, [healthId])
 
+  const US_STATES = {
+    'AL': 'Alabama',
+    'AK': 'Alaska',
+    'AZ': 'Arizona',
+    'AR': 'Arkansas',
+    'CA': 'California',
+    'CO': 'Colorado',
+    'CT': 'Connecticut',
+    'DE': 'Delaware',
+    'FL': 'Florida',
+    'GA': 'Georgia',
+    'HI': 'Hawaii',
+    'ID': 'Idaho',
+    'IL': 'Illinois',
+    'IN': 'Indiana',
+    'IA': 'Iowa',
+    'KS': 'Kansas',
+    'KY': 'Kentucky',
+    'LA': 'Louisiana',
+    'ME': 'Maine',
+    'MD': 'Maryland',
+    'MA': 'Massachusetts',
+    'MI': 'Michigan',
+    'MN': 'Minnesota',
+    'MS': 'Mississippi',
+    'MO': 'Missouri',
+    'MT': 'Montana',
+    'NE': 'Nebraska',
+    'NV': 'Nevada',
+    'NH': 'New Hampshire',
+    'NJ': 'New Jersey',
+    'NM': 'New Mexico',
+    'NY': 'New York',
+    'NC': 'North Carolina',
+    'ND': 'North Dakota',
+    'OH': 'Ohio',
+    'OK': 'Oklahoma',
+    'OR': 'Oregon',
+    'PA': 'Pennsylvania',
+    'RI': 'Rhode Island',
+    'SC': 'South Carolina',
+    'SD': 'South Dakota',
+    'TN': 'Tennessee',
+    'TX': 'Texas',
+    'UT': 'Utah',
+    'VT': 'Vermont',
+    'VA': 'Virginia',
+    'WA': 'Washington',
+    'WV': 'West Virginia',
+    'WI': 'Wisconsin',
+    'WY': 'Wyoming'
+  };
+
+  const [state, setState] = useState('')
+  const [stateTouched, setStateTouched] = useState(false)
+  const stateError = useMemo(() => {
+    if (!state) return 'State is required'
+    if (!US_STATES[state]) return 'Invalid state selected'
+    return null
+  }, [state])
+
     const fetchUserDetails = (id) => {
         setIsLoading(true);
         axios.post("BACKEND/getcustomer",{
@@ -135,6 +196,27 @@ export default function Login() {
             </label>
             {healthIdTouched && healthIdError && (
               <div id="health-id-error" className="error">{healthIdError}</div>
+            )}
+            <label className="field">
+              <span className="field-label">State</span>
+              <select
+                className="input"
+                value={state}
+                onChange={(e) => setState(e.target.value)}
+                onBlur={() => setStateTouched(true)}
+                aria-invalid={!!(stateTouched && stateError)}
+                aria-describedby="state-error"
+              >
+                <option value="">Select a state</option>
+                {Object.entries(US_STATES).map(([abbreviation, name]) => (
+                  <option key={abbreviation} value={abbreviation}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {stateTouched && stateError && (
+              <div id="state-error" className="error">{stateError}</div>
             )}
             <div className="actions">
               <button className="btn primary" onClick={handleNext} disabled={!!healthIdError && !!isLoading}>
