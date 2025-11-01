@@ -3,7 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Link, useParams, Navigate } fro
 import ErrorPage from "./components/ErrorPage.jsx";
 import CustomerData from "./components/CustomerData.jsx";
 import Agent from "./components/AgentScreen.jsx";
-import Admin from "./components/Admin.jsx";
+import AdminAdd from "./components/AdminAdd.jsx";
+import AdminDash from "./components/AdminDash.jsx";
 
 function App() {
 
@@ -19,7 +20,8 @@ function App() {
                    <Route path="/login" element={<Login />} />
                    <Route path="/customerdetails" element={<CustomerData />} />
                    <Route path="/agent/:region" element={<Agent />} />
-                   <Route path="/admin" element={<Admin />} />
+                   <Route path="/adminadd" element={<AdminAdd />} />
+                   <Route path="/admin" element={<AdminDash />} />
                    {/*<Route path="/analytics" element={<Analytics />} />*/}
 
                    {/* Fallback route */}

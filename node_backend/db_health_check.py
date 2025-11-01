@@ -3,14 +3,14 @@ import time
 import psycopg2
 
 class CockroachDBHealthChecker:
-    def __init__(self, db_configs, interval=60):
+    def __init__(self, url, interval=60):
         """
         db_configs: list of dicts, each with connection params for a CockroachDB instance
         interval: health check interval in seconds
         """
-        self.db_configs = db_configs
+        self.url = url
         self.interval = interval
-        self.health_results = {i: None for i in range(len(db_configs))}
+        self.health_results = {}
         self.results_lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread = None

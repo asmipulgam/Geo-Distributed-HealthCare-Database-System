@@ -17,7 +17,7 @@ If you are developing a production application, we recommend using TypeScript wi
 
 Screens
 
-1) Admin -> Able to add new data. Todo: View all regions data, delete a data 
+1) AdminAdd -> Able to add new data. Todo: View all regions data, delete a data 
 2) Agent -> View all data of that particular region. Todo: Ability to delete data
 3) CustomerData -> Just View Customer Info
 4) ErrorPage -> Generic Page for invalid URL

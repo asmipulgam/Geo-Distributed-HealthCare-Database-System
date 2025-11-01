@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import "tailwindcss/index.css"
 
-export default function Admin() {
+export default function AdminAdd() {
     const [formData, setFormData] = useState({
         name: "",
         role: "",

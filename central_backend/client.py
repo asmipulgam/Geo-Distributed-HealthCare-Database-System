@@ -2,22 +2,30 @@ import configparser
 import requests
 import json
 
-LOCAL_URLS = []
-REMOTE_URLS = []
+LOCAL_URLS = {
+    "east": "",
+    "west": "",
+    "central": ""
+}
+REMOTE_URLS = {
+    "east": "",
+    "west": "",
+    "central": ""
+}
 
 def init():
     config = configparser.ConfigParser()
     config.read('central_backend/database.conf')
-    LOCAL_URLS.append(config.get('DEFAULT', 'localUSEastURL'))
-    REMOTE_URLS.append(config.get('DEFAULT', 'remoteUSEastURL'))
-    LOCAL_URLS.append(config.get('DEFAULT', 'localUSWestURL'))
-    REMOTE_URLS.append(config.get('DEFAULT', 'remoteUSWestURL'))
-    LOCAL_URLS.append(config.get('DEFAULT', 'localCentralURL'))
-    REMOTE_URLS.append(config.get('DEFAULT', 'remoteCentralURL'))
+    LOCAL_URLS["east"] = config.get('DEFAULT', 'localUSEastURL')
+    REMOTE_URLS["east"] = config.get('DEFAULT', 'remoteUSEastURL')
+    LOCAL_URLS["west"] = config.get('DEFAULT', 'localUSWestURL')
+    REMOTE_URLS["west"] = config.get('DEFAULT', 'remoteUSWestURL')
+    LOCAL_URLS["central"] = config.get('DEFAULT', 'localCentralURL')
+    REMOTE_URLS["central"] = config.get('DEFAULT', 'remoteCentralURL')
     print("Read Backend URLS")
 
 
-class DBCLient:
+class DBClient:
 
     def __init__(self):
         self.url = None
