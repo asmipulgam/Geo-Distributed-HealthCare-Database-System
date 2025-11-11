@@ -29,23 +29,30 @@ CMD_OLD = [
 
 ]
 
-CMD = [
-    "docker run -d --name roach-seattle-1  -p 26257:26257 -p 8080:8080 -v roachs1-data:/cockroach/cockroach-data cockroachdb/cockroach start-single-node --insecure --accept-sql-without-tls --locality=region=us-west1,zone=a",
+OLDER = [
 
-    #"docker run -d --name roach-seattle-2  -p 26258:26257 -p 8081:8080 -v roach1-data:/cockroach/cockroach-data cockroachdb/cockroach start-single-node --insecure --accept-sql-without-tls --locality=region=us-west1,zone=b",
+     #"docker run -d --name roach-seattle-2  -p 26258:26257 -p 8081:8080 -v roach1-data:/cockroach/cockroach-data cockroachdb/cockroach start-single-node --insecure --accept-sql-without-tls --locality=region=us-west1,zone=b",
 
 
     #"docker run -d --name roach-newyork-1  -p 26259:26257 -p 8082:8080 -v roach1-data:/cockroach/cockroach-data cockroachdb/cockroach start-single-node --insecure --accept-sql-without-tls --locality=region=us-east1,zone=a",
 
-    "docker run -d --name roach-newyork-2  -p 26260:26257 -p 8083:8080 -v roachn2-data:/cockroach/cockroach-data cockroachdb/cockroach start-single-node --insecure --accept-sql-without-tls --locality=region=us-east1,zone=b",
-
-    "docker run -d --name roach-omaha-1  -p 26261:26257 -p 8084:8080 -v roacho1-data:/cockroach/cockroach-data cockroachdb/cockroach start-single-node --insecure --accept-sql-without-tls --locality=region=us-central1,zone=c",
 
    # "docker run -d --name roach-omaha-2  -p 26262:26257 -p 8085:8080 -v roach1-data:/cockroach/cockroach-data cockroachdb/cockroach start-single-node --insecure --accept-sql-without-tls --locality=region=us-central1,zone=f"
 
     #"docker exec roach-seattle-1 ./cockroach init --insecure",
     #"docker exec roach-newyork-2 ./cockroach init --insecure",
     #"docker exec roach-omaha-1 ./cockroach init --insecure",
+
+]
+
+CMD = [
+    "docker run -d --name roach-seattle-1  -p 26257:26257 -p 8080:8080 -v roachs1-data:/cockroach/cockroach-data cockroachdb/cockroach start-single-node --insecure --accept-sql-without-tls --locality=region=us-west1,zone=a",
+
+    "docker run -d --name roach-newyork-2  -p 26260:26257 -p 8083:8080 -v roachn2-data:/cockroach/cockroach-data cockroachdb/cockroach start-single-node --insecure --accept-sql-without-tls --locality=region=us-east1,zone=b",
+
+    "docker run -d --name roach-omaha-1  -p 26261:26257 -p 8084:8080 -v roacho1-data:/cockroach/cockroach-data cockroachdb/cockroach start-single-node --insecure --accept-sql-without-tls --locality=region=us-central1,zone=c",
+
+
 
     "docker exec roach-seattle-1 ./cockroach sql --insecure --execute=\"CREATE DATABASE IF NOT EXISTS west;\"",
     "docker exec roach-newyork-2 ./cockroach sql --insecure --execute=\"CREATE DATABASE IF NOT EXISTS central;\"",

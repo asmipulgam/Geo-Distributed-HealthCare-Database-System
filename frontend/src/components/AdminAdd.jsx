@@ -3,13 +3,31 @@ import "tailwindcss/index.css"
 
 export default function AdminAdd() {
     const [formData, setFormData] = useState({
-        name: "",
-        role: "",
-        region: "",
-        email: "",
-        department: "",
-        remarks: "",
-    });
+        "id": "",
+        "first_name": "",
+        "last_name": "",
+        "email": "",
+        "Phone number": "",
+        "weight": "",
+        "age": "",
+        "gender": "",
+        "Prefix": "",
+        "Martial Status": "",
+        "Address": "",
+        "City": "",
+        "State": "",
+        "Hospital Name": "",
+        "Hospital Address": "",
+        "Region": "",
+        "Visit Date": "",
+        "Treatment": "",
+        "Doctor Appointed": "",
+        "Number of Doctors Appointed": "",
+        "Doctor's Contact": "",
+        "Allergies": "",
+        "Height": ""
+
+});
 
     const [status, setStatus] = useState("");
 
