@@ -7,6 +7,7 @@ import re
 import uuid
 from psycopg2.extras import Json
 import time
+from fetchall import FetchAll
 
 app = Flask(__name__)
 REGIONMAP= {
@@ -414,6 +415,44 @@ def replicate_outbox_events():
             print(" Replication error:", e)
             time.sleep(5)
 
+@app.get("/api/all")
+def api_all():
+    """Return paginated patients rows.
+
+    Query params:
+      - region: one of 'west','east','central' (affects DSN)
+      - cursor: integer offset (default 0)
+      - dir: 'next' or 'prev' (default 'next')
+      - page_size: optional page size (default 20)
+    """
+    if FetchAll is None:
+        return jsonify({"error": "fetchall helper not available"}), 500
+
+    region = request.args.get("region", "west")
+    try:
+        cursor = int(request.args.get("cursor", 0))
+    except Exception:
+        cursor = 0
+    dir = request.args.get("dir", "next")
+    try:
+        page_size = int(request.args.get("page_size", 20))
+    except Exception:
+        page_size = 20
+
+    # Map region to DSN; adjust ports if your local setup differs
+
+    fetcher = FetchAll()
+    try:
+        page = fetcher.fetch(cursor=cursor, dir=dir, page_size=page_size)
+        return jsonify(page), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            fetcher.close()
+        except Exception:
+            pass
+
 
 if __name__ == "__main__":
     # Run the Flask development server
@@ -427,30 +466,30 @@ if __name__ == "__main__":
     #createTable()
     #loadLocalData(dbConnection)
 
-    data = {
-  "id": "99999",
-  "first_name": "Cinda",
-  "last_name": "Klimowicz",
-  "email": "cklimowicz0@ameblo.jp",
-  "Phone number": "427-676-7930",
-  "weight": "121",
-  "age": "86",
-  "gender": "Female",
-  "Prefix": "Miss",
-  "Martial Status": "Single",
-  "Address": "07 Marcy Point",
-  "City": "Portland",
-  "State": "California",
-  "Hospital Name": "Mountain View Medical Center",
-  "Hostipal Address": "26285 BERG RD APT 276",
-  "Region": "West",
-  "Visit Date": "2025-05-05",
-  "Treatement": "herbal remedies",
-  "Doctor Appointed": "Cinda Klimowicz",
-  "Number of Doctors Appointed": "1",
-  "Doctor's Contact": "175-244-2423",
-  "Allergies": "peanuts",
-  "Height": "8"
-    }
-    insert_patient_new(dbConnection, data)
-    #app.run(host="0.0.0.0", port=5000, debug=True)
+#     data = {
+#   "id": "99999",
+#   "first_name": "Cinda",
+#   "last_name": "Klimowicz",
+#   "email": "cklimowicz0@ameblo.jp",
+#   "Phone number": "427-676-7930",
+#   "weight": "121",
+#   "age": "86",
+#   "gender": "Female",
+#   "Prefix": "Miss",
+#   "Martial Status": "Single",
+#   "Address": "07 Marcy Point",
+#   "City": "Portland",
+#   "State": "California",
+#   "Hospital Name": "Mountain View Medical Center",
+#   "Hostipal Address": "26285 BERG RD APT 276",
+#   "Region": "West",
+#   "Visit Date": "2025-05-05",
+#   "Treatement": "herbal remedies",
+#   "Doctor Appointed": "Cinda Klimowicz",
+#   "Number of Doctors Appointed": "1",
+#   "Doctor's Contact": "175-244-2423",
+#   "Allergies": "peanuts",
+#   "Height": "8"
+#     }
+#     insert_patient_new(dbConnection, data)
+    app.run(host="0.0.0.0", port=5001, debug=True)

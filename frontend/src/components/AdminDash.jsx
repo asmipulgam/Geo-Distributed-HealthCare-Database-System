@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import { BACKEND_URL } from './constants';
 
 export default function AdminDash() {
     const [stats, setStats] = useState({ total: 6, active: 6, dead: 0 });
@@ -20,10 +21,36 @@ export default function AdminDash() {
        // fetchData();
     }, []);
 
+    // Dummy backup handler for now
+    const handleBackup = () => {
+        console.log('Backup triggered (dummy)')
+        
+        try {
+            fetch(`${BACKEND_URL}/api/backup`).then(res => {
+                if (!res.ok) throw new Error(`Backup failed: ${res.status}`);
+                console.log('Backup successful');
+            }).catch(err => {
+                console.error('Backup error:', err);
+            });
+        } catch (err) {
+            console.error('Backup error:', err);
+        }
+    }
+
     return (
         <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center">
             <div className="w-full max-w-7xl">
-                <h1 className="text-3xl font-bold mb-6 text-gray-800 text-center">Cluster Dashboard</h1>
+                <div className="flex items-center justify-between mb-6">
+                    <h1 className="text-3xl font-bold text-gray-800">Cluster Dashboard</h1>
+                    <div>
+                        <button
+                            onClick={handleBackup}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700 transition"
+                        >
+                            Backup
+                        </button>
+                    </div>
+                </div>
 
 
                 {/* Summary Cards */}

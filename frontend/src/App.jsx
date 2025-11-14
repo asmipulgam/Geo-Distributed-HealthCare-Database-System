@@ -1,5 +1,7 @@
 import Login from './components/Login'
-import { BrowserRouter as Router, Routes, Route, Link, useParams, Navigate } from "react-router-dom";
+import LoginScreen from './components/LoginScreen'
+import { isAuthenticated } from './auth'
+import { BrowserRouter as Router, Routes, Route, Link, Navigate } from "react-router-dom";
 import ErrorPage from "./components/ErrorPage.jsx";
 import CustomerData from "./components/CustomerData.jsx";
 import Agent from "./components/AgentScreen.jsx";
@@ -15,13 +17,15 @@ function App() {
                <Routes>
                    {/* Default route redirects to /login */}
                    <Route path="/" element={<Navigate to="/login" replace />} />
+                   
 
                    {/* Actual routes */}
                    <Route path="/login" element={<Login />} />
                    <Route path="/customerdetails" element={<CustomerData />} />
-                   <Route path="/agent/:region" element={<Agent />} />
-                   <Route path="/adminadd" element={<AdminAdd />} />
-                   <Route path="/admin" element={<AdminDash />} />
+                   <Route path="/agent/:region" element={isAuthenticated() ? <Agent /> : <LoginScreen />} />
+                   <Route path="/adminadd" element={isAuthenticated() ? <AdminAdd /> : <LoginScreen />} />
+                   <Route path="/admin" element={isAuthenticated() ? <AdminDash /> : <LoginScreen />} />
+                   <Route path="/airlogin" element={<LoginScreen />} />
                    {/*<Route path="/analytics" element={<Analytics />} />*/}
 
                    {/* Fallback route */}

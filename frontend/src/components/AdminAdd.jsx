@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import "tailwindcss/index.css"
+import { BACKEND_URL } from "./constants";
 
 export default function AdminAdd() {
     const [formData, setFormData] = useState({
@@ -43,14 +44,14 @@ export default function AdminAdd() {
         setStatus("Submitting...");
 
         try {
-            const response = await fetch("/api/admin/create", {
+            const response = await fetch(`${BACKEND_URL}/api/admin/create`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(formData),
             });
 
             if (response.ok) {
-                setStatus("✅ Record submitted successfully!");
+                setStatus(" Record submitted successfully!");
                 setFormData({
                     name: "",
                     role: "",
@@ -60,11 +61,11 @@ export default function AdminAdd() {
                     remarks: "",
                 });
             } else {
-                setStatus("❌ Failed to submit record.");
+                setStatus(" Failed to submit record.");
             }
         } catch (error) {
             console.error("Error submitting form:", error);
-            setStatus("⚠️ Network error.");
+            setStatus(" Network error.");
         }
     };
 
