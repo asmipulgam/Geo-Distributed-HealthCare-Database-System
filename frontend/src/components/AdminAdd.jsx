@@ -2,6 +2,18 @@ import React, { useState } from "react";
 import "tailwindcss/index.css"
 import { BACKEND_URL } from "./constants";
 
+const US_STATES = {
+    'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas', 'CA': 'California', 'CO': 'Colorado',
+    'CT': 'Connecticut', 'DE': 'Delaware', 'FL': 'Florida', 'GA': 'Georgia', 'HI': 'Hawaii', 'ID': 'Idaho',
+    'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa', 'KS': 'Kansas', 'KY': 'Kentucky', 'LA': 'Louisiana',
+    'ME': 'Maine', 'MD': 'Maryland', 'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota', 'MS': 'Mississippi',
+    'MO': 'Missouri', 'MT': 'Montana', 'NE': 'Nebraska', 'NV': 'Nevada', 'NH': 'New Hampshire', 'NJ': 'New Jersey',
+    'NM': 'New Mexico', 'NY': 'New York', 'NC': 'North Carolina', 'ND': 'North Dakota', 'OH': 'Ohio', 'OK': 'Oklahoma',
+    'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'Rhode Island', 'SC': 'South Carolina', 'SD': 'South Dakota',
+    'TN': 'Tennessee', 'TX': 'Texas', 'UT': 'Utah', 'VT': 'Vermont', 'VA': 'Virginia', 'WA': 'Washington',
+    'WV': 'West Virginia', 'WI': 'Wisconsin', 'WY': 'Wyoming'
+}
+
 export default function AdminAdd() {
     const [formData, setFormData] = useState({
         "id": "",
@@ -53,13 +65,31 @@ export default function AdminAdd() {
             if (response.ok) {
                 setStatus(" Record submitted successfully!");
                 setFormData({
-                    name: "",
-                    role: "",
-                    region: "",
-                    email: "",
-                    department: "",
-                    remarks: "",
-                });
+        "id": "",
+        "first_name": "",
+        "last_name": "",
+        "email": "",
+        "Phone number": "",
+        "weight": "",
+        "age": "",
+        "gender": "",
+        "Prefix": "",
+        "Martial Status": "",
+        "Address": "",
+        "City": "",
+        "State": "",
+        "Hospital Name": "",
+        "Hospital Address": "",
+        "Region": "",
+        "Visit Date": "",
+        "Treatment": "",
+        "Doctor Appointed": "",
+        "Number of Doctors Appointed": "",
+        "Doctor's Contact": "",
+        "Allergies": "",
+        "Height": ""
+
+});
             } else {
                 setStatus(" Failed to submit record.");
             }
@@ -69,40 +99,85 @@ export default function AdminAdd() {
         }
     };
 
+    // Dummy region update function; user will replace with real logic
+    const updateRegionForState = (stateAbbrev) => {
+        const west = new Set(['AK','AZ','CA','CO','HI','ID','MT','NV','NM','OR','UT','WA','WY'])
+        const central = new Set(['AR','IA','IL','IN','KS','KY','LA','MI','MN','MO','MS','NE','ND','OH','OK','SD','TN','TX','WI'])
+        const east = new Set(['AL','CT','DE','FL','GA','MA','MD','ME','NH','NJ','NY','NC','PA','RI','SC','VT','VA','WV'])
+
+        let regionVal = ''
+        if (west.has(stateAbbrev)) regionVal = 'us-west'
+        else if (central.has(stateAbbrev)) regionVal = 'us-central'
+        else if (east.has(stateAbbrev)) regionVal = 'us-east'
+        else regionVal = ''
+
+        setFormData(prev => ({ ...prev, 'Region': regionVal }))
+    }
+
+    const handleStateChange = (e) => {
+        const val = e.target.value
+        setFormData(prev => ({ ...prev, 'State': val }))
+        updateRegionForState(val)
+    }
+
     return (
-        <div className="flex flex-col items-center justify-center min-h-screen p-6">
-            <h2 className="text-4xl font-bold mb-8">Admin Form</h2>
+        <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-50">
+            <h2 className="text-3xl font-semibold mb-6 text-gray-800">Admin Form</h2>
 
             <form
                 onSubmit={handleSubmit}
-                className="w-full max-w-md  p-6 rounded-2xl shadow-lg border bg-green-300 space-y-4"
+                className="w-full max-w-3xl p-6 rounded-2xl shadow bg-white border border-gray-100 space-y-4"
             >
                 {Object.keys(formData).map((field) => (
                     <div key={field} className="flex flex-col">
-                        <label htmlFor={field} className="capitalize mb-1 text-blue-700">
-                            {field}:
-                        </label>
-                        <input
-                            id={field}
-                            name={field}
-                            type="text"
-                            value={formData[field]}
-                            onChange={handleChange}
-                            style={{marginLeft: "40px",marginRight: "40px"}}
-                            className="bg-white border border-blue-400 rounded-lg p-2 text-white"
-                        />
+                        <label htmlFor={field} className="text-sm font-medium text-gray-700 mb-1">{field}</label>
+
+                        {field === 'State' ? (
+                            <select
+                                id={field}
+                                name={field}
+                                value={formData[field]}
+                                onChange={handleStateChange}
+                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm py-2 px-3 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                                <option value="">Select a state</option>
+                                {Object.entries(US_STATES).map(([abbrev, full]) => (
+                                    <option key={abbrev} value={abbrev}>{full}</option>
+                                ))}
+                            </select>
+                        ) : field === 'Region' ? (
+                            <input
+                                id={field}
+                                name={field}
+                                type="text"
+                                value={formData[field]}
+                                readOnly
+                                className="mt-1 block w-full rounded-md border-gray-200 bg-gray-50 py-2 px-3"
+                            />
+                        ) : (
+                            <input
+                                id={field}
+                                name={field}
+                                type="text"
+                                value={formData[field]}
+                                onChange={handleChange}
+                                className="mt-1 block w-full rounded-md border-gray-300 p-2"
+                            />
+                        )}
                     </div>
                 ))}
 
-                <button
-                    type="submit"
-                    className="w-full mt-4 py-2 border border-white rounded-full hover:bg-white hover:text-black transition-all duration-300"
-                >
-                    Submit
-                </button>
+                <div className="flex items-center justify-end">
+                    <button
+                        type="submit"
+                        className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                    >
+                        Submit
+                    </button>
+                </div>
             </form>
 
-            {status && <p className="mt-4 text-gray-400">{status}</p>}
+            {status && <p className="mt-4 text-gray-600">{status}</p>}
         </div>
     );
 }

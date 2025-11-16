@@ -11,15 +11,16 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
-    "d3": "^7.10.0",
-    "topojson-client": "^3.1.0",
     "axios": "^1.12.2",
+    "d3": "^7.9.0",
+    "d3-geo": "^2.0.2",
     "dotenv": "^17.2.3",
     "framer-motion": "^12.23.24",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.9.4",
-    "tailwindcss": "^4.1.14"
+    "tailwindcss": "^4.1.14",
+    "topojson-client": "^3.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

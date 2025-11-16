@@ -2,11 +2,17 @@ import React, { useEffect, useRef, useState } from 'react'
 import { geoAlbersUsa, geoPath } from 'd3-geo'
 import { feature } from 'topojson-client'
 
-// Cities to highlight with [lon, lat]
-const CITIES = [
-  { name: 'Omaha', coords: [-95.9345, 41.2565] },
-  { name: 'New York', coords: [-74.0060, 40.7128] },
-  { name: 'Seattle', coords: [-122.3321, 47.6062] },
+// GCP zones to highlight with approximate [lon, lat]
+const ZONES = [
+  // us-west2 (Los Angeles area) approximate locations for a/b/c
+  { name: 'us-west2-a', coords: [-118.25, 34.05] },
+  { name: 'us-west2-b', coords: [-118.24, 34.06] },
+  { name: 'us-west2-c', coords: [-118.23, 34.04] },
+
+  // us-central1 (Iowa / Omaha area) approximate locations for b/c/f
+  { name: 'us-central1-b', coords: [-95.9345, 41.2565] },
+  { name: 'us-central1-c', coords: [-95.92, 41.26] },
+  { name: 'us-central1-f', coords: [-95.95, 41.25] },
 ]
 
 export default function USChoroplethMap({ width = 900, height = 550 }){
@@ -73,17 +79,50 @@ export default function USChoroplethMap({ width = 900, height = 550 }){
           opacity={0.6}
         />
 
-        {/* Highlight cities with outlined circles and labels */}
-        <g className="cities">
-          {CITIES.map((c) => {
-            const [x, y] = projection(c.coords) || [null, null]
+        {/* Highlight selected GCP zones with outlined circles and labels.
+            Use small offsets and label backgrounds to keep text readable when
+            markers overlap. */}
+        <g className="zones">
+          {ZONES.map((z, i) => {
+            const [x, y] = projection(z.coords) || [null, null]
             if (x == null || y == null) return null
+
+            // Cycle through offsets to reduce overlap
+            const offsets = [
+              { dx: 14, dy: 6 },
+              { dx: -14, dy: -14 },
+              { dx: 14, dy: -14 },
+              { dx: -14, dy: 6 },
+              { dx: 0, dy: -18 },
+              { dx: 0, dy: 18 }
+            ]
+            const off = offsets[i % offsets.length]
+
+            const label = z.name
+            const fontSize = 12
+            // approximate text width: avg char width * length
+            const textWidth = Math.max(60, label.length * (fontSize * 0.6))
+            const rectPaddingX = 8
+            const rectPaddingY = 4
+
+            const rectX = off.dx > 0 ? x + off.dx : x + off.dx - textWidth - rectPaddingX
+            const rectY = y + off.dy - (fontSize / 1.5)
+
             return (
-              <g key={c.name} transform={`translate(${x},${y})`}>
-                <circle r={10} fill="none" stroke="#ff4500" strokeWidth={2.5} />
-                <circle r={5} fill="#fff" stroke="#ff4500" strokeWidth={1} />
-                <text x={14} y={6} fontSize={12} fontFamily="sans-serif" fill="#111">
-                  {c.name}
+              <g key={z.name}>
+                <g transform={`translate(${x},${y})`}>
+                  <circle r={10} fill="none" stroke="#1f8ef1" strokeWidth={2.5} />
+                  <circle r={5} fill="#fff" stroke="#1f8ef1" strokeWidth={1} />
+                </g>
+
+                {/* leader line from marker to label */}
+                <line x1={x} y1={y} x2={rectX + 6} y2={rectY + rectPaddingY + (fontSize / 3)} stroke="#a0aec0" strokeWidth={1} strokeLinecap="round" />
+
+                {/* label background */}
+                <rect x={rectX} y={rectY} rx={6} ry={6} width={textWidth + rectPaddingX} height={fontSize + rectPaddingY * 2} fill="#ffffff" opacity={0.95} stroke="#e2e8f0" />
+
+                <text x={rectX + rectPaddingX / 2} y={rectY + fontSize + (rectPaddingY / 2) - 2} fontSize={fontSize} fontFamily="sans-serif" fill="#0b1220">
+                  {label}
                 </text>
               </g>
             )

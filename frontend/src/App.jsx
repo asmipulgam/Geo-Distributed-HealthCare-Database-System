@@ -7,6 +7,8 @@ import CustomerData from "./components/CustomerData.jsx";
 import Agent from "./components/AgentScreen.jsx";
 import AdminAdd from "./components/AdminAdd.jsx";
 import AdminDash from "./components/AdminDash.jsx";
+import AdminSearch from "./components/AdminSearch.jsx";
+import AnalyticsPage from "./components/AnalyticsPage.jsx";
 
 function App() {
 
@@ -25,6 +27,8 @@ function App() {
                    <Route path="/agent/:region" element={isAuthenticated() ? <Agent /> : <LoginScreen />} />
                    <Route path="/adminadd" element={isAuthenticated() ? <AdminAdd /> : <LoginScreen />} />
                    <Route path="/admin" element={isAuthenticated() ? <AdminDash /> : <LoginScreen />} />
+                   <Route path="/admin/search" element={isAuthenticated() ? <AdminSearch /> : <LoginScreen />} />
+                   <Route path="/analytics" element={isAuthenticated() ? <AnalyticsPage /> : <LoginScreen />} />
                    <Route path="/airlogin" element={<LoginScreen />} />
                    {/*<Route path="/analytics" element={<Analytics />} />*/}
 

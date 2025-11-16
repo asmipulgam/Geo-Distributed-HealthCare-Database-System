@@ -15,6 +15,8 @@ For production/useful systems consider keyset-pagination for large tables.
 from typing import Optional, Dict, Any
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import time
+import json
 
 # Column order used in app.py; returned dicts will include these keys
 COLS = [
@@ -32,10 +34,10 @@ COLS = [
     "City",
     "State",
     "Hospital Name",
-    "Hostipal Address",
+    "Hospital Address",
     "Region",
     "Visit Date",
-    "Treatement",
+    "Treatment",
     "Doctor Appointed",
     "Number of Doctors Appointed",
     "Doctor's Contact",
@@ -43,12 +45,11 @@ COLS = [
     "Height",
 ]
 
-DEFAULT_DSN = "postgresql://root@localhost:26257/west?sslmode=disable"
 
 
 class FetchAll:
     def __init__(self, dsn: Optional[str] = None):
-        self.dsn = dsn or DEFAULT_DSN
+        self.dsn = dsn 
         self.conn = None
 
     def _connect(self):
@@ -93,11 +94,41 @@ class FetchAll:
                 last_page = max(0, (total - 1) // page_size * page_size)
                 offset = last_page
 
-            cur.execute(
-                f"SELECT {', '.join('"' + c + '"' for c in COLS)} FROM patients ORDER BY id LIMIT %s OFFSET %s;",
-                (page_size, offset),
-            )
+            # Build the SELECT SQL (columns are quoted because some contain spaces/quotes)
+            select_sql = f"SELECT {', '.join('\"' + c + '\"' for c in COLS)} FROM patients ORDER BY id LIMIT %s OFFSET %s;"
+
+            # Attempt to capture a planner cost estimate via EXPLAIN (FORMAT JSON).
+            explain_json = None
+            explain_time_ms = None
+            try:
+                t0 = time.time()
+                cur.execute("EXPLAIN (FORMAT JSON) " + select_sql, (page_size, offset))
+                explain_time_ms = int((time.time() - t0) * 1000)
+                erow = cur.fetchone()
+                if erow:
+                    # RealDictCursor returns a dict-like row; take the first value which is usually the JSON text
+                    if isinstance(erow, dict):
+                        first_val = next(iter(erow.values()))
+                    elif isinstance(erow, (list, tuple)):
+                        first_val = erow[0]
+                    else:
+                        first_val = erow
+
+                    # Try to parse JSON; some drivers already return parsed JSON
+                    try:
+                        explain_json = json.loads(first_val) if isinstance(first_val, (str, bytes)) else first_val
+                    except Exception:
+                        explain_json = first_val
+            except Exception:
+                # EXPLAIN may not be supported or may fail on some clusters; ignore rather than crash
+                explain_json = None
+                explain_time_ms = None
+
+            # Execute the actual select and time it
+            t0 = time.time()
+            cur.execute(select_sql, (page_size, offset))
             rows = cur.fetchall()
+            select_time_ms = int((time.time() - t0) * 1000)
 
             # compute next/prev indices
             next_offset = offset + page_size
@@ -110,12 +141,21 @@ class FetchAll:
                 rec = {k: r.get(k) for k in COLS}
                 records.append(rec)
 
+            # Build metrics about this query
+            metrics = {
+                "select_time_ms": select_time_ms,
+                "rows": len(rows),
+                "explain_time_ms": explain_time_ms,
+                "explain": explain_json,
+            }
+
         return {
             "records": records,
             "nextIndex": nextIndex,
             "prevIndex": prevIndex,
             "count": total,
             "offset": offset,
+            "metrics": metrics,
         }
 
 

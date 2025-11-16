@@ -1,1 +1,5 @@
 Flask
+google-cloud-storage
+configparser
+requests
+psycopg2-binary

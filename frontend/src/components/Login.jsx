@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import '../login.css'
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import { BACKEND_URL } from './constants';
 
 function isDigits(str) {
   return /^\d+$/.test(str)
@@ -107,9 +108,12 @@ export default function Login() {
 
     const fetchUserDetails = (id) => {
         setIsLoading(true);
-        axios.post("BACKEND/getcustomer",{
-            id: id
+        axios.post(`${BACKEND_URL}/api/getcustomer`,{
+            id: id,
+            state: state
         }).then(res => {
+            console.log(res);
+            console.log(res.data);
             setUserData(res.data)
             setIsLoading(false)
             setStep(2)
@@ -150,12 +154,17 @@ export default function Login() {
     }
   }
 
+  function validateDOB() {
+    return true;
+  }
+
   function handleLogin(e) {
     e.preventDefault()
     setDobTouched(true)
-    if (!dobError && parsedDob) {
+    if (!dobError && parsedDob && validateDOB()) {
+
       setSubmitted(true)
-        navigate("/details", { state: { user: userData } });
+        navigate("/customerdetails", { state: { user: userData } });
 
     }
   }
