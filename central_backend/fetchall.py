@@ -20,29 +20,23 @@ import json
 
 # Column order used in app.py; returned dicts will include these keys
 COLS = [
-    "id",
-    "first_name",
-    "last_name",
-    "email",
-    "Phone number",
-    "weight",
-    "age",
-    "gender",
-    "Prefix",
-    "Martial Status",
+    "Patient_ID",
+    "Patient_Name",
+    "Doctor_ID",
+    "Doctor_Name",
+    "Age",
+    "Gender",
+    "Phone",
+    "Email",
     "Address",
-    "City",
     "State",
-    "Hospital Name",
-    "Hospital Address",
     "Region",
-    "Visit Date",
-    "Treatment",
-    "Doctor Appointed",
-    "Number of Doctors Appointed",
-    "Doctor's Contact",
-    "Allergies",
-    "Height",
+    "Appointment_Date",
+    "Diagnosis",
+    "Date_of_Birth",
+    "is_organ_donor",
+    "lat",
+    "lon",
 ]
 
 
@@ -51,6 +45,8 @@ class FetchAll:
     def __init__(self, dsn: Optional[str] = None):
         self.dsn = dsn 
         self.conn = None
+        # allow caller to override the patients table name (e.g., patients_west)
+        self.table_name = 'patients_central'
 
     def _connect(self):
         if self.conn is None or self.conn.closed:
@@ -75,7 +71,7 @@ class FetchAll:
         self._connect()
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             # total count to determine next existence
-            cur.execute("SELECT COUNT(*) AS cnt FROM patients;")
+            cur.execute(f"SELECT COUNT(*) AS cnt FROM {self.table_name};")
             total = cur.fetchone()["cnt"] or 0
 
             try:
@@ -95,7 +91,7 @@ class FetchAll:
                 offset = last_page
 
             # Build the SELECT SQL (columns are quoted because some contain spaces/quotes)
-            select_sql = f"SELECT {', '.join('\"' + c + '\"' for c in COLS)} FROM patients ORDER BY id LIMIT %s OFFSET %s;"
+            select_sql = f"SELECT {', '.join('\"' + c + '\"' for c in COLS)} FROM {self.table_name} ORDER BY \"Patient_ID\" LIMIT %s OFFSET %s;"
 
             # Attempt to capture a planner cost estimate via EXPLAIN (FORMAT JSON).
             explain_json = None

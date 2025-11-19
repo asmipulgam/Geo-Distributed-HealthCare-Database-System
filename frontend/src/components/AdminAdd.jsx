@@ -16,38 +16,32 @@ const US_STATES = {
 
 export default function AdminAdd() {
     const [formData, setFormData] = useState({
-        "id": "",
-        "first_name": "",
-        "last_name": "",
-        "email": "",
-        "Phone number": "",
-        "weight": "",
-        "age": "",
-        "gender": "",
-        "Prefix": "",
-        "Martial Status": "",
-        "Address": "",
-        "City": "",
-        "State": "",
-        "Hospital Name": "",
-        "Hospital Address": "",
-        "Region": "",
-        "Visit Date": "",
-        "Treatment": "",
-        "Doctor Appointed": "",
-        "Number of Doctors Appointed": "",
-        "Doctor's Contact": "",
-        "Allergies": "",
-        "Height": ""
-
-});
+        Patient_ID: '',
+        Patient_Name: '',
+        Doctor_ID: '',
+        Doctor_Name: '',
+        Age: '',
+        Gender: '',
+        Phone: '',
+        Email: '',
+        Address: '',
+        State: '',
+        Region: '',
+        Appointment_Date: '',
+        Diagnosis: '',
+        Date_of_Birth: '',
+        is_organ_donor: false,
+        lat: '',
+        lon: '',
+    });
 
     const [status, setStatus] = useState("");
 
     const handleChange = (e) => {
+        const { name, type, value, checked } = e.target;
         setFormData({
             ...formData,
-            [e.target.name]: e.target.value,
+            [name]: type === 'checkbox' ? checked : value,
         });
     };
 
@@ -65,31 +59,8 @@ export default function AdminAdd() {
             if (response.ok) {
                 setStatus(" Record submitted successfully!");
                 setFormData({
-        "id": "",
-        "first_name": "",
-        "last_name": "",
-        "email": "",
-        "Phone number": "",
-        "weight": "",
-        "age": "",
-        "gender": "",
-        "Prefix": "",
-        "Martial Status": "",
-        "Address": "",
-        "City": "",
-        "State": "",
-        "Hospital Name": "",
-        "Hospital Address": "",
-        "Region": "",
-        "Visit Date": "",
-        "Treatment": "",
-        "Doctor Appointed": "",
-        "Number of Doctors Appointed": "",
-        "Doctor's Contact": "",
-        "Allergies": "",
-        "Height": ""
-
-});
+                    Patient_ID: '', Patient_Name: '', Doctor_ID: '', Doctor_Name: '', Age: '', Gender: '', Phone: '', Email: '', Address: '', State: '', Region: '', Appointment_Date: '', Diagnosis: '', Date_of_Birth: '', is_organ_donor: false, lat: '', lon: ''
+                });
             } else {
                 setStatus(" Failed to submit record.");
             }
@@ -137,7 +108,7 @@ export default function AdminAdd() {
                                 id={field}
                                 name={field}
                                 value={formData[field]}
-                                onChange={handleStateChange}
+                                onChange={(e) => { handleChange(e); handleStateChange(e); }}
                                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm py-2 px-3 focus:ring-blue-500 focus:border-blue-500"
                             >
                                 <option value="">Select a state</option>
@@ -154,11 +125,16 @@ export default function AdminAdd() {
                                 readOnly
                                 className="mt-1 block w-full rounded-md border-gray-200 bg-gray-50 py-2 px-3"
                             />
+                        ) : field === 'is_organ_donor' ? (
+                            <div className="flex items-center gap-2">
+                                <input id={field} name={field} type="checkbox" checked={!!formData[field]} onChange={handleChange} className="h-4 w-4" />
+                                <label htmlFor={field} className="text-sm">Is organ donor</label>
+                            </div>
                         ) : (
                             <input
                                 id={field}
                                 name={field}
-                                type="text"
+                                type={field.includes('Date') || field === 'Date_of_Birth' ? 'date' : (field === 'Age' ? 'number' : 'text')}
                                 value={formData[field]}
                                 onChange={handleChange}
                                 className="mt-1 block w-full rounded-md border-gray-300 p-2"

@@ -1,32 +1,36 @@
 -- Schema for 'west' database
-USE east;
+-- USE east;
 
-CREATE TABLE IF NOT EXISTS patients (
-  "id" INT,
-  "first_name" STRING,
-  "last_name" STRING,
-  "email" STRING,
-  "Phone number" STRING,
-  "weight" DECIMAL(6,2),
-  "age" INT,
-  "gender" STRING,
-  "Prefix" STRING,
-  "Martial Status" STRING,
+-- Doctors table: simple reference table for providers
+CREATE TABLE IF NOT EXISTS doctors (
+  "Doctor_ID" STRING PRIMARY KEY,
+  "Doctor_Name" STRING,
+  "Hospital" STRING,
+  "Region" STRING
+);
+
+
+CREATE TABLE IF NOT EXISTS patients_central (
+  "Patient_ID" STRING,
+  "Patient_Name" STRING,
+  "Doctor_ID" STRING,
+  "Doctor_Name" STRING,
+  "Age" INT,
+  "Gender" STRING,
+  "Phone" STRING,
+  "Email" STRING,
   "Address" STRING,
-  "City" STRING,
   "State" STRING,
-  "Hospital Name" STRING,
-  "Hospital Address" STRING,
   "Region" STRING,
-  "Visit Date" DATE,
-  "Treatment" STRING,
-  "Doctor Appointed" STRING,
-  "Number of Doctors Appointed" INT,
-  "Doctor's Contact" STRING,
-  "Allergies" STRING,
-  "Height" DECIMAL(5,2),
-  PRIMARY KEY ("State","id")
-) PARTITION BY LIST ("State") (
+  "Appointment_Date" DATE,
+  "Diagnosis" STRING,
+  "Date_of_Birth" DATE,
+  "is_organ_donor" BOOLEAN,
+  "lat" FLOAT8,
+  "lon" FLOAT8,
+  PRIMARY KEY ("State","Patient_ID"),
+  FOREIGN KEY ("Doctor_ID") REFERENCES doctors("Doctor_ID")
+ ) PARTITION BY LIST ("State") (
   PARTITION p_AL VALUES IN ('AL'),
   PARTITION p_CT VALUES IN ('CT'),
   PARTITION p_DE VALUES IN ('DE'),
@@ -57,3 +61,30 @@ CREATE TABLE IF NOT EXISTS outbox_events (
 );
 
 
+CREATE OR REPLACE FUNCTION haversine_km(
+  lat1 float8, lon1 float8, lat2 float8, lon2 float8
+)
+RETURNS float8
+RETURNS NULL ON NULL INPUT
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT (2.0::float8 * 6371.0088::float8) * ASIN(
+    SQRT(
+      POWER(SIN(RADIANS(lat2 - lat1) / 2.0), 2.0) +
+      COS(RADIANS(lat1)) * COS(RADIANS(lat2)) *
+      POWER(SIN(RADIANS(lon2 - lon1) / 2.0), 2.0)
+    )
+  );
+$$;
+
+--- SAMPLE
+SELECT
+  id, first_name, last_name, email,
+  lat, lon,
+  haversine_km(lat, lon, 31.4255, -111.94) AS distance_km
+FROM patients_central
+WHERE lat IS NOT NULL AND lon IS NOT NULL
+ORDER BY distance_km ASC
+LIMIT 5;
+--- note: sample adjusted to query central table name

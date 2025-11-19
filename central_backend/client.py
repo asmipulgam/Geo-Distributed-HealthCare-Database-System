@@ -24,31 +24,29 @@ BACKUP_URLS = {
      #"east": "",
 }
 
+# Patient columns (new canonical order)
 COLS = [
-    "id",
-    "first_name",
-    "last_name",
-    "email",
-    "Phone number",
-    "weight",
-    "age",
-    "gender",
-    "Prefix",
-    "Martial Status",
+    "Patient_ID",
+    "Patient_Name",
+    "Doctor_ID",
+    "Doctor_Name",
+    "Age",
+    "Gender",
+    "Phone",
+    "Email",
     "Address",
-    "City",
     "State",
-    "Hospital Name",
-    "Hospital Address",
     "Region",
-    "Visit Date",
-    "Treatment",
-    "Doctor Appointed",
-    "Number of Doctors Appointed",
-    "Doctor's Contact",
-    "Allergies",
-    "Height",
+    "Appointment_Date",
+    "Diagnosis",
+    "Date_of_Birth",
+    "is_organ_donor",
+    "lat",
+    "lon",
 ]
+
+# Doctors table columns
+DOCTOR_COLS = ["Doctor_ID", "Doctor_Name", "Hospital", "Region"]
 
 
 # --- helpers to coerce text to proper Python types (None on blanks) ---
@@ -85,10 +83,10 @@ def getFormattedURL(raw_url, useSecure = True):
 def init():
     config = configparser.ConfigParser()
     config.read('database.conf')
-    #LOCAL_URLS["east"] = config.get('DEFAULT', 'eastURL')
-    #BACKUP_URLS["east"] = config.get('DEFAULT', 'remoteUSEastBackupURL')
+    LOCAL_URLS["us-east"] = config.get('DEFAULT', 'eastURL')
+    #BACKUP_URLS["us-east"] = config.get('DEFAULT', 'remoteUSEastBackupURL')
     LOCAL_URLS["us-west"] = getFormattedURL(config.get('DEFAULT', 'westURL'))
-    BACKUP_URLS["us-west"] = getFormattedURL(config.get('DEFAULT', 'remoteUSWestBackupURL'))
+    BACKUP_URLS["us-west"] = "us-east"#getFormattedURL(config.get('DEFAULT', 'remoteUSWestBackupURL'))
     #LOCAL_URLS["us-central"] = getFormattedURL(config.get('DEFAULT', 'centralURL'))
     #BACKUP_URLS["central"] = config.get('DEFAULT', 'remoteCentralBackupURL')
     print("Read Backend URLS")
@@ -138,7 +136,13 @@ class DBClient:
             url = self.getURLFromState({"state":state})
             conn = psycopg2.connect(url)
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                select_sql = "SELECT * FROM patients WHERE id = %s LIMIT 1;"
+                # join doctors to include provider info
+                select_sql = 'SELECT p.*, d."Doctor_Name" AS doctor_name, d."Hospital" AS doctor_hospital, d."Region" AS doctor_region'
+                # determine patients table name based on state->region mapping
+                region_for_state = self.region_map.get(state)
+                table_name = ('patients_west' if (region_for_state and region_for_state.endswith('west')) else 'patients_central')
+                select_sql += f' FROM {table_name} p LEFT JOIN doctors d ON p."Doctor_ID" = d."Doctor_ID"'
+                select_sql += ' WHERE p."Patient_ID" = %s AND p."State" = %s LIMIT 1;'
 
                 # explain_json = None
                 # explain_time_ms = None
@@ -163,22 +167,13 @@ class DBClient:
                 #     explain_time_ms = None
 
                 t0 = time.time()
-                cur.execute(select_sql, (user_id,))
+                cur.execute(select_sql, (user_id, state))
                 row = cur.fetchone()
                 select_time_ms = int((time.time() - t0) * 1000)
 
                 if row:
-                    # Map RealDict row to expected COLS ordering where possible
-                    result = {col: row.get(col) for col in COLS}
-                    # metrics = {
-                    #     "select_time_ms": select_time_ms,
-                    #     "rows": 1,
-                    #     "explain_time_ms": explain_time_ms,
-                    #     "explain": explain_json,
-                    # }
-                    # # attach metrics alongside the result for the caller
-                    # result["metrics"] = metrics
-                    return result
+                    # Return full row including joined doctor fields
+                    return dict(row)
                 else:
                     # metrics = {
                     #     "select_time_ms": select_time_ms,
@@ -186,11 +181,11 @@ class DBClient:
                     #     "explain_time_ms": explain_time_ms,
                     #     "explain": explain_json,
                     # }
-                    return {"error": "User not found", "metrics" :"metrics"}, 404
+                    return {"error": "User not found", "metrics": {"select_time_ms": select_time_ms, "rows": 0}}, 404
         except Exception as e:
             return {"error": str(e)}
 
-    def search_patients(self, filters=None, region='us-west', limit=1000):
+    def search_patients(self, filters=None, region='us-west', limit=1000, center_lat=None, center_lon=None, donor_only=False):
         """
         Search patients table with a list of filter objects.
         filters: list of {col: <column>, op: <operator>, val: <value>}
@@ -232,11 +227,39 @@ class DBClient:
                 where_parts.append(f'"{col}" {op} %s')
                 params.append(val)
 
-        where_clause = (' WHERE ' + ' AND '.join(where_parts)) if where_parts else ''
+            # Enforce donor-only filter if requested (safety: add even if callers forgot)
+            if donor_only:
+                where_parts.append('"is_organ_donor" = %s')
+                params.append(True)
 
-        cols_sql = ', '.join(f'"{c}"' for c in COLS)
-        sql = f'SELECT {cols_sql} FROM patients{where_clause} ORDER BY id LIMIT %s;'
-        params.append(limit)
+            where_clause = (' WHERE ' + ' AND '.join(where_parts)) if where_parts else ''
+
+        # Resolve the physical patients table name for this region
+        def _patients_table_for_region(region_key):
+            if not region_key:
+                return 'patients_central'
+            suffix = region_key.split('-')[-1]
+            if suffix == 'west':
+                return 'patients_west'
+            # default to central for central/east/others
+            return 'patients_central'
+
+        table_name = _patients_table_for_region(region)
+
+        # If center coordinates provided, include distance using haversine_km
+        use_distance = (center_lat is not None and center_lon is not None)
+        if use_distance:
+            cols_sql = ', '.join(f'"{c}"' for c in COLS)
+            # compute distance_km using DB function haversine_km(lat, lon, center_lat, center_lon)
+            cols_sql = cols_sql + ", " + f"haversine_km(\"lat\", \"lon\", %s, %s) AS distance_km"
+            sql = f'SELECT {cols_sql} FROM {table_name}{where_clause} WHERE \"lat\" IS NOT NULL AND \"lon\" IS NOT NULL ORDER BY distance_km ASC LIMIT %s;'
+            params.insert(0, center_lon)  # careful: we'll append center_lat then center_lon in correct order
+            params.insert(0, center_lat)
+            params.append(limit)
+        else:
+            cols_sql = ', '.join(f'"{c}"' for c in COLS)
+            sql = f'SELECT {cols_sql} FROM {table_name}{where_clause} ORDER BY "Patient_ID" LIMIT %s;'
+            params.append(limit)
 
         conn = self.connections.get(region)
         if conn is None:
@@ -301,42 +324,85 @@ class DBClient:
                         else:
                             patient = payload
 
-                        # normalize patient mapping: prefer exact column keys, else try a normalized key match
-                        def build_values_map(patient_obj):
-                            if not isinstance(patient_obj, dict):
+                        # normalize mapping helper for any target columns
+                        def build_values_for_cols(obj, cols_list):
+                            if not isinstance(obj, dict):
                                 raise ValueError("payload is not a JSON object")
-                            # build normalized lookup for incoming keys
-                            incoming = {re.sub(r"[^0-9a-z]", "", str(k).lower()): v for k, v in patient_obj.items()}
+                            incoming = {re.sub(r"[^0-9a-z]", "", str(k).lower()): v for k, v in obj.items()}
                             values = []
-                            for col in COLS:
-                                if col in patient_obj:
-                                    values.append(patient_obj.get(col))
+                            for col in cols_list:
+                                if col in obj:
+                                    values.append(obj.get(col))
                                     continue
                                 col_norm = re.sub(r"[^0-9a-z]", "", col.lower())
                                 values.append(incoming.get(col_norm))
                             return tuple(values)
 
+                        # Decide which table to write to and the appropriate columns/conflict keys
                         if op == "upsert":
-                            cols_sql = ", ".join(f'"{c}"' for c in COLS)
-                            placeholders = ", ".join(["%s"] * len(COLS))
-                            update_assignments = ",\n        ".join(
-                                f'"{c}" = EXCLUDED."{c}"' for c in COLS if c != "id"
-                            )
-
-                            values = build_values_map(patient)
-
-                            sql = f"""
-                                INSERT INTO patients ({cols_sql})
-                                VALUES ({placeholders})
-                                ON CONFLICT ("id") DO UPDATE SET
-                                {update_assignments};
-                            """
-
-                            repl_cur.execute(sql, values)
+                            if table and str(table).startswith('patients'):
+                                # If outbox already contains a physical patients table name (patients_west/patients_central)
+                                # use it directly; otherwise determine patients table name based on payload region/state
+                                if str(table).startswith('patients_'):
+                                    table_name = table
+                                else:
+                                    region_key = None
+                                    if isinstance(patient, dict):
+                                        region_key = patient.get('Region') or self.region_map.get(patient.get('State'))
+                                    table_name = ('patients_west' if (region_key and str(region_key).endswith('west')) else 'patients_central')
+                                cols_sql = ", ".join(f'"{c}"' for c in COLS)
+                                placeholders = ", ".join(["%s"] * len(COLS))
+                                # exclude primary key components from updates
+                                update_assignments = ", ".join(
+                                    f'"{c}" = EXCLUDED."{c}"' for c in COLS if c not in ("Patient_ID", "State")
+                                )
+                                values = build_values_for_cols(patient, COLS)
+                                sql = f"""
+                                    INSERT INTO {table_name} ({cols_sql})
+                                    VALUES ({placeholders})
+                                    ON CONFLICT ("State","Patient_ID") DO UPDATE SET
+                                    {update_assignments};
+                                """
+                                repl_cur.execute(sql, values)
+                            elif table == 'doctors':
+                                cols_sql = ", ".join(f'"{c}"' for c in DOCTOR_COLS)
+                                placeholders = ", ".join(["%s"] * len(DOCTOR_COLS))
+                                update_assignments = ", ".join(
+                                    f'"{c}" = EXCLUDED."{c}"' for c in DOCTOR_COLS if c != "Doctor_ID"
+                                )
+                                values = build_values_for_cols(patient, DOCTOR_COLS)
+                                sql = f"""
+                                    INSERT INTO doctors ({cols_sql})
+                                    VALUES ({placeholders})
+                                    ON CONFLICT ("Doctor_ID") DO UPDATE SET
+                                    {update_assignments};
+                                """
+                                repl_cur.execute(sql, values)
+                            else:
+                                # Unknown table - skip
+                                print(f" Skipping unknown table in outbox: {table}")
                         elif op == "delete":
-                            # for delete we expect an id field
-                            pid = patient.get("id") if isinstance(patient, dict) else None
-                            repl_cur.execute("DELETE FROM patients WHERE id = %s;", (pid,))
+                            # Use appropriate delete criteria
+                            if table and str(table).startswith('patients'):
+                                pid = None
+                                state_val = None
+                                if isinstance(patient, dict):
+                                    pid = patient.get("Patient_ID") or patient.get("id")
+                                    state_val = patient.get("State")
+                                # If outbox table is explicit (patients_west/patients_central) use it, otherwise derive
+                                if str(table).startswith('patients_'):
+                                    table_name = table
+                                else:
+                                    region_key = None
+                                    if isinstance(patient, dict):
+                                        region_key = patient.get('Region') or self.region_map.get(patient.get('State'))
+                                    table_name = ('patients_west' if (region_key and str(region_key).endswith('west')) else 'patients_central')
+                                repl_cur.execute(f"DELETE FROM {table_name} WHERE \"Patient_ID\" = %s AND \"State\" = %s;", (pid, state_val))
+                            elif table == 'doctors':
+                                did = None
+                                if isinstance(patient, dict):
+                                    did = patient.get("Doctor_ID") or patient.get("id")
+                                repl_cur.execute("DELETE FROM doctors WHERE \"Doctor_ID\" = %s;", (did,))
 
                         # Mark as processed on source
                         src_cur.execute("UPDATE outbox_events SET processed = true WHERE event_id = %s;", (event_id,))
@@ -359,29 +425,23 @@ class DBClient:
     def row_to_tuple(self,r):
         """Map a CSV dict row to a positional tuple matching COLS (with type coercion)."""
         return (
-            to_str(r.get("id")),
-            to_str(r.get("first_name")),
-            to_str(r.get("last_name")),
-            to_str(r.get("email")),
-            to_str(r.get("Phone number")),
-            to_str(r.get("weight")),
-            to_int(r.get("age")),
-            to_str(r.get("gender")),
-            to_str(r.get("Prefix")),
-            to_str(r.get("Martial Status")),
+            to_str(r.get("Patient_ID")),
+            to_str(r.get("Patient_Name")),
+            to_str(r.get("Doctor_ID")),
+            to_str(r.get("Doctor_Name")),
+            to_int(r.get("Age")),
+            to_str(r.get("Gender")),
+            to_str(r.get("Phone")),
+            to_str(r.get("Email")),
             to_str(r.get("Address")),
-            to_str(r.get("City")),
             to_str(r.get("State")),
-            to_str(r.get("Hospital Name")),
-            to_str(r.get("Hospital Address")),
             to_str(r.get("Region")),
-            to_date(r.get("Visit Date")),  # expects YYYY-MM-DD by default; see to_date()
-            to_str(r.get("Treatment")),
-            to_str(r.get("Doctor Appointed")),
-            to_str(r.get("Number of Doctors Appointed")),
-            to_str(r.get("Doctor's Contact")),
-            to_str(r.get("Allergies")),
-            to_str(r.get("Height")),
+            to_date(r.get("Appointment_Date")),
+            to_str(r.get("Diagnosis")),
+            to_date(r.get("Date_of_Birth")),
+            (r.get("is_organ_donor") if isinstance(r.get("is_organ_donor"), bool) else (str(r.get("is_organ_donor")).lower() in ("true","1","t","yes"))),
+            (float(r.get("lat")) if r.get("lat") not in (None, "") else None),
+            (float(r.get("lon")) if r.get("lon") not in (None, "") else None),
         )
     
 
@@ -421,19 +481,23 @@ class DBClient:
 
         print(f"CP2, {cols_sql},{tup}")
 
+        # determine patients table name from the incoming row's Region (or state mapping)
+        region_key = normalized_row.get('Region') or self.region_map.get(normalized_row.get('State'))
+        table_name = ("patients_west" if (region_key and str(region_key).endswith('west')) else "patients_central")
+
         if upsert:
             update_assignments = ", ".join(
-                f'"{c}" = EXCLUDED."{c}"' for c in COLS if c != "id"
+                f'"{c}" = EXCLUDED."{c}"' for c in COLS if c not in ("Patient_ID", "State")
             )
             sql = f"""
-                INSERT INTO patients ({cols_sql})
+                INSERT INTO {table_name} ({cols_sql})
                 VALUES ({placeholders})
-                ON CONFLICT ("State","id") DO UPDATE SET
+                ON CONFLICT ("State","Patient_ID") DO UPDATE SET
                 {update_assignments};
             """
             print("CP3")
         else:
-            sql = f'INSERT INTO patients ({cols_sql}) VALUES ({placeholders});'
+            sql = f'INSERT INTO {table_name} ({cols_sql}) VALUES ({placeholders});'
         print(f"cp4 {self.getURLFromState({'state':normalized_row.get('State')})}")
 
         conn = self.connections.get(normalized_row.get("Region"))
@@ -461,7 +525,7 @@ class DBClient:
                 curr.execute("""
                     INSERT INTO outbox_events (event_id, table_name, op,payload)
                             VALUES (%s, %s, %s, %s);
-                """, (str(uuid.uuid4()), "patients", "upsert", Json(normalized_row)))
+                """, (str(uuid.uuid4()), table_name, "upsert", Json(normalized_row)))
             conn.commit()
             metrics["outbox_time_ms"] = int((time.time() - t1) * 1000)
 
@@ -482,26 +546,106 @@ class DBClient:
         cols_sql = ", ".join(f'"{c}"' for c in COLS)
         placeholders = ", ".join(["%s"] * len(COLS))
 
+        # Determine table name using the Region value from the first row (bulk inserts are expected per-region)
+        first_region = (rows[0].get('Region') if rows and isinstance(rows[0], dict) else None)
+        table_name = ("patients_west" if (first_region and str(first_region).endswith('west')) else "patients_central")
+
         if upsert:
             # Update all mutable columns on conflict; leave id intact
             update_assignments = ", ".join(
-                f'"{c}" = EXCLUDED."{c}"' for c in COLS if c != "id"
+                f'"{c}" = EXCLUDED."{c}"' for c in COLS if c not in ("Patient_ID", "State")
             )
             sql = f"""
-                INSERT INTO patients ({cols_sql})
+                INSERT INTO {table_name} ({cols_sql})
                 VALUES ({placeholders})
-                ON CONFLICT ("id") DO UPDATE SET
+                ON CONFLICT ("State","Patient_ID") DO UPDATE SET
                 {update_assignments};
             """
         else:
-            sql = f'INSERT INTO patients ({cols_sql}) VALUES ({placeholders});'
+            sql = f'INSERT INTO {table_name} ({cols_sql}) VALUES ({placeholders});'
 
         with conn.cursor() as cur:
             execute_batch(cur, sql, tuples, page_size=batch_size)
+            # Insert corresponding outbox events so replication can pick these up.
+            try:
+                outbox_rows = []
+                for r in rows:
+                    # payload: use incoming dict as JSON; ensure it's a dict
+                    payload = r if isinstance(r, dict) else {}
+                    outbox_rows.append((str(uuid.uuid4()), table_name, 'upsert', Json(payload)))
+                if outbox_rows:
+                    execute_batch(cur, "INSERT INTO outbox_events (event_id, table_name, op, payload) VALUES (%s, %s, %s, %s);", outbox_rows, page_size=batch_size)
+            except Exception:
+                # don't fail the bulk insert if outbox insertion has issues; record/logging can be added
+                pass
         conn.commit()
 
+    def bulk_insert_doctors(self, conn, rows, batch_size=1000, upsert=True):
+        """
+        Insert or upsert into doctors.
+        - conn: psycopg2 connection
+        - rows: list[dict] where keys match DOCTOR_COLS (or variants)
+        - upsert=True will do INSERT ... ON CONFLICT("Doctor_ID") DO UPDATE
+        """
+        # Normalize incoming rows into tuples matching DOCTOR_COLS
+        tuples = []
+        for r in rows:
+            # support dict-like rows; normalize keys
+            incoming = {re.sub(r"[^0-9a-z]", "", str(k).lower()): v for k, v in r.items()} if isinstance(r, dict) else {}
+            values = []
+            for col in DOCTOR_COLS:
+                if isinstance(r, dict) and col in r:
+                    values.append(r.get(col))
+                    continue
+                col_norm = re.sub(r"[^0-9a-z]", "", col.lower())
+                values.append(incoming.get(col_norm))
+            tuples.append(tuple(values))
+
+        cols_sql = ", ".join(f'"{c}"' for c in DOCTOR_COLS)
+        placeholders = ", ".join(["%s"] * len(DOCTOR_COLS))
+
+        if upsert:
+            update_assignments = ", ".join(f'"{c}" = EXCLUDED."{c}"' for c in DOCTOR_COLS if c != "Doctor_ID")
+            sql = f"""
+                INSERT INTO doctors ({cols_sql})
+                VALUES ({placeholders})
+                ON CONFLICT ("Doctor_ID") DO UPDATE SET
+                {update_assignments};
+            """
+        else:
+            sql = f'INSERT INTO doctors ({cols_sql}) VALUES ({placeholders});'
+
+        with conn.cursor() as cur:
+            execute_batch(cur, sql, tuples, page_size=batch_size)
+            # Insert corresponding outbox events for doctors
+            try:
+                outbox_rows = []
+                for r in rows:
+                    payload = r if isinstance(r, dict) else {}
+                    outbox_rows.append((str(uuid.uuid4()), 'doctors', 'upsert', Json(payload)))
+                if outbox_rows:
+                    execute_batch(cur, "INSERT INTO outbox_events (event_id, table_name, op, payload) VALUES (%s, %s, %s, %s);", outbox_rows, page_size=batch_size)
+            except Exception:
+                pass
+        conn.commit()
+
+    def loadDoctorData(self,conn):
+        paths="./data/Doctors.csv"
+        if isinstance(paths, (str, Path)):
+            paths = [paths]
+
+        rows = []
+        for p in map(Path, paths):
+            with p.open(newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for r in reader:
+                    rows.append({k.strip(): (v.strip() if isinstance(v, str) else v) for k, v in r.items()})
+        print(rows)
+        self.bulk_insert_doctors(conn, rows, batch_size=1000, upsert=True)
+
+
     def loadLocalData(self,conn):
-        paths="./WEST.csv"
+        paths="./data/Patients_US-WEST.csv"
         if isinstance(paths, (str, Path)):
             paths = [paths]
 

@@ -68,11 +68,11 @@ export default function Agent() {
                             </tr>
                         ) : (
                             records.map((agent, idx) => (
-                                <tr key={agent.id} className={`${idx % 2 === 0 ? "bg-gray-900" : "bg-gray-950"} hover:bg-gray-800 transition` }>
-                                    <td className="py-3 px-4 text-sm text-gray-200 font-mono">{agent.id}</td>
-                                    <td className="py-3 px-4 text-sm text-gray-100">{(agent.first_name || "") + (agent.last_name ? ` ${agent.last_name}` : "")}</td>
+                                <tr key={agent.Patient_ID || agent.PatientId || idx} className={`${idx % 2 === 0 ? "bg-gray-900" : "bg-gray-950"} hover:bg-gray-800 transition` }>
+                                    <td className="py-3 px-4 text-sm text-gray-200 font-mono">{agent.Patient_ID || agent.PatientId || ''}</td>
+                                    <td className="py-3 px-4 text-sm text-gray-100">{agent.Patient_Name || `${agent.first_name || ''} ${agent.last_name || ''}`}</td>
                                     <td className="py-3 px-4 text-sm text-gray-300">{agent.Region || agent.region || region}</td>
-                                    <td className="py-3 px-4 text-sm text-gray-300">{agent["Visit Date"] || agent.visit_date || "-"}</td>
+                                    <td className="py-3 px-4 text-sm text-gray-300">{agent.Appointment_Date || agent["Visit Date"] || agent.visit_date || "-"}</td>
                                 </tr>
                             ))
                         )}

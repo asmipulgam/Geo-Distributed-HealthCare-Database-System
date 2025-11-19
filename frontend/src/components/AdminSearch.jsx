@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { BACKEND_URL } from './constants';
 
 const COLS = [
-    "id","first_name","last_name","email","Phone number","weight","age","gender","Prefix","Martial Status","Address","City","State","Hospital Name","Hospital Address","Region","Visit Date","Treatment","Doctor Appointed","Number of Doctors Appointed","Doctor's Contact","Allergies","Height",
+    "Patient_ID","Patient_Name","Doctor_ID","Doctor_Name","Age","Gender","Phone","Email","Address","State","Region","Appointment_Date","Diagnosis","Date_of_Birth","is_organ_donor","lat","lon"
 ];
 
 const OPERATORS = ['=', '!=', 'LIKE', '<', '>', '<=', '>=', 'IN'];
@@ -31,7 +31,7 @@ function buildWhereClause(filters) {
 }
 
 export default function AdminSearch() {
-    const [filters, setFilters] = useState([{ col: 'id', op: '=', val: '' }]);
+    const [filters, setFilters] = useState([{ col: 'Patient_ID', op: '=', val: '' }]);
     const [region, setRegion] = useState('us-west');
     const [results, setResults] = useState([]);
     const [sqlPreview, setSqlPreview] = useState('');
@@ -45,7 +45,7 @@ export default function AdminSearch() {
     }
 
     function addFilter() {
-        setFilters(prev => [...prev, { col: 'id', op: '=', val: '' }]);
+        setFilters(prev => [...prev, { col: 'Patient_ID', op: '=', val: '' }]);
     }
 
     function removeFilter(i) {

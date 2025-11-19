@@ -9,6 +9,7 @@ import AdminAdd from "./components/AdminAdd.jsx";
 import AdminDash from "./components/AdminDash.jsx";
 import AdminSearch from "./components/AdminSearch.jsx";
 import AnalyticsPage from "./components/AnalyticsPage.jsx";
+import OrganSearch from "./components/OrganSearch.jsx";
 
 function App() {
 
@@ -29,6 +30,7 @@ function App() {
                    <Route path="/admin" element={isAuthenticated() ? <AdminDash /> : <LoginScreen />} />
                    <Route path="/admin/search" element={isAuthenticated() ? <AdminSearch /> : <LoginScreen />} />
                    <Route path="/analytics" element={isAuthenticated() ? <AnalyticsPage /> : <LoginScreen />} />
+                   <Route path="/organsearch" element={isAuthenticated() ? <OrganSearch /> : <LoginScreen />} />
                    <Route path="/airlogin" element={<LoginScreen />} />
                    {/*<Route path="/analytics" element={<Analytics />} />*/}
 
