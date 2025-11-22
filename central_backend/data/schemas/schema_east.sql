@@ -51,6 +51,42 @@ CREATE TABLE IF NOT EXISTS patients_central (
   PARTITION p_WV VALUES IN ('WV')
 );
 
+CREATE TABLE IF NOT EXISTS patients_west (
+  "Patient_ID" STRING,
+  "Patient_Name" STRING,
+  "Doctor_ID" STRING,
+  "Doctor_Name" STRING,
+  "Age" INT,
+  "Gender" STRING,
+  "Phone" STRING,
+  "Email" STRING,
+  "Address" STRING,
+  "State" STRING,
+  "Region" STRING,
+  "Appointment_Date" DATE,
+  "Diagnosis" STRING,
+  "Date_of_Birth" DATE,
+  "is_organ_donor" BOOLEAN,
+  "lat" FLOAT8,
+  "lon" FLOAT8,
+  PRIMARY KEY ("State","Patient_ID"),
+  FOREIGN KEY ("Doctor_ID") REFERENCES doctors("Doctor_ID")
+ ) PARTITION BY LIST ("State") (
+  PARTITION p_AK VALUES IN ('AK'),
+  PARTITION p_AZ VALUES IN ('AZ'),
+  PARTITION p_CA VALUES IN ('CA'),
+  PARTITION p_CO VALUES IN ('CO'),
+  PARTITION p_HI VALUES IN ('HI'),
+  PARTITION p_ID VALUES IN ('ID'),
+  PARTITION p_MT VALUES IN ('MT'),
+  PARTITION p_NM VALUES IN ('NM'),
+  PARTITION p_NV VALUES IN ('NV'),
+  PARTITION p_OR VALUES IN ('OR'),
+  PARTITION p_UT VALUES IN ('UT'),
+  PARTITION p_WA VALUES IN ('WA'),
+  PARTITION p_WY VALUES IN ('WY')
+);
+
 CREATE TABLE IF NOT EXISTS outbox_events (
   "event_id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   "table_name" STRING NOT NULL,
