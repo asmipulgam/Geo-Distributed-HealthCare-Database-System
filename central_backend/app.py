@@ -148,6 +148,22 @@ def addData():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+@app.post('/admin/reload-connections')
+def admin_reload_connections():
+    """Admin endpoint to close and re-open DB connections based on current
+    `LOCAL_URLS` and `/etc/hosts` changes. Returns a JSON report indicating
+    which regions are reachable.
+    """
+    global db
+    try:
+        if 'db' not in globals() or db is None:
+            db = DBClient()
+        statuses = db.reload_connections()
+        return jsonify({"status": "ok", "connections": statuses}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 
 
 
@@ -229,7 +245,7 @@ def api_search():
         body = request.get_json(silent=True) or {}
         region = body.get('region', 'us-west')
         filters = body.get('filters') or []
-        limit = int(body.get('limit', 1000))
+        limit = int(body.get('limit', 10))
 
         t0 = time.time()
         rows = db.search_patients(filters=filters, region=region, limit=limit)
@@ -318,6 +334,64 @@ def api_organ_search():
         print('organ_search error:', e)
         return jsonify({'error': str(e)}), 500
 
+
+@app.get('/api/analytics/summary')
+def api_analytics_summary():
+    """Run simple distributed queries across west and central and return merged stats.
+
+    Query params:
+      - per_region_limit: max rows to fetch per region for aggregation/sample (default 500)
+    """
+    try:
+        per_region_limit = int(request.args.get('per_region_limit', 500))
+    except Exception:
+        per_region_limit = 500
+
+    regions = ['us-west', 'us-central']
+    totals = { 'rows': 0 }
+    by_state = {}
+    gender = {}
+    ages = []
+    sample_rows = []
+
+    for r in regions:
+        try:
+            rows = db.search_patients(filters=[], region=r, limit=per_region_limit)
+        except Exception as e:
+            rows = []
+        if not rows:
+            continue
+        for row in rows:
+            totals['rows'] += 1
+            st = row.get('State') or row.get('state') or 'Unknown'
+            by_state[st] = by_state.get(st, 0) + 1
+            g = row.get('Gender') or row.get('gender') or 'Unknown'
+            gender[g] = gender.get(g, 0) + 1
+            try:
+                age_val = row.get('Age') or row.get('age')
+                if age_val is not None:
+                    ages.append(int(age_val))
+            except Exception:
+                pass
+            if len(sample_rows) < 200:
+                sample_rows.append({
+                    'Patient_ID': row.get('Patient_ID') or row.get('patient_id'),
+                    'Patient_Name': row.get('Patient_Name') or row.get('patient_name'),
+                    'State': st,
+                    'Age': row.get('Age') or row.get('age'),
+                    'Gender': g,
+                })
+
+    ages_sorted = sorted(ages)
+
+    return jsonify({
+        'total_rows': totals['rows'],
+        'by_state': by_state,
+        'gender': gender,
+        'ages': ages_sorted,
+        'sample_rows': sample_rows,
+    }), 200
+
 def initReplicators():
     # Create Replicator instances that run their internal replication logic
     # by providing the DB client and source/target regions. The Replicator
@@ -367,7 +441,7 @@ def shutdown_replicators(signum=None, frame=None):
     print(f"Shutting down replicators (signal={signum})...")
     for rep in list(REPLICATORS):
         try:
-            rep.stop(timeout=5)
+            rep.stop(timeout=1)
         except Exception as e:
             print("Error stopping replicator:", e)
     REPLICATORS.clear()
@@ -386,7 +460,7 @@ if __name__ == "__main__":
     except Exception:
         pass
 
-    initReplicators()
+    #initReplicators()
     print("Client initialized")
     #db.loadDoctorData(db.connections["us-west"])
     #db.loadLocalData(db.connections["us-west"])

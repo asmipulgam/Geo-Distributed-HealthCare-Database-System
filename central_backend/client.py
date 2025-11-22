@@ -15,12 +15,12 @@ import csv
 
 LOCAL_URLS = {
     "us-west": "",
-    #"us-central": ""
+    "us-central": ""
     #"east": "",
 }
 BACKUP_URLS = {
     "us-west": "",
-   # "central": ""
+    "us-central": ""
      #"east": "",
 }
 
@@ -87,8 +87,8 @@ def init():
     #BACKUP_URLS["us-east"] = config.get('DEFAULT', 'remoteUSEastBackupURL')
     LOCAL_URLS["us-west"] = getFormattedURL(config.get('DEFAULT', 'westURL'))
     BACKUP_URLS["us-west"] = "us-east"#getFormattedURL(config.get('DEFAULT', 'remoteUSWestBackupURL'))
-    #LOCAL_URLS["us-central"] = getFormattedURL(config.get('DEFAULT', 'centralURL'))
-    #BACKUP_URLS["central"] = config.get('DEFAULT', 'remoteCentralBackupURL')
+    LOCAL_URLS["us-central"] = getFormattedURL(config.get('DEFAULT', 'centralURL'))
+    BACKUP_URLS["us-central"] = "us-east"#config.get('DEFAULT', 'remoteCentralBackupURL')
     print("Read Backend URLS")
 
 
@@ -106,10 +106,99 @@ class DBClient:
 
     def initConnections(self):
         for region, url in LOCAL_URLS.items():
-            print(f"Connecting to {region} DB at {url}")
-            conn = psycopg2.connect(url)
-            self.connections[region] = conn
+            try:
+                if not url:
+                    print(f"No URL configured for region {region}; skipping connection")
+                    continue
+                print(f"Connecting to {region} DB at {url}")
+                conn = psycopg2.connect(url)
+                self.connections[region] = conn
+            except Exception as e:
+                # don't raise on startup; allow service to continue and attempt connections lazily
+                print(f"Warning: failed to connect to {region} at {url}: {e}")
         print("Initialized DB Connections", self.connections)
+
+    def reload_connections(self):
+        """Close and re-establish connections based on current LOCAL_URLS.
+
+        Returns a dict mapping region -> { ok: bool, error?: str } so the caller
+        can report what succeeded/failed.
+        """
+        statuses = {}
+        # Close any existing connections
+        for r, c in list(self.connections.items()):
+            try:
+                c.close()
+            except Exception:
+                pass
+        self.connections.clear()
+
+        # Re-initialize connections using current LOCAL_URLS values
+        for region, url in LOCAL_URLS.items():
+            if not url:
+                statuses[region] = {"ok": False, "error": "no url configured"}
+                continue
+            try:
+                conn = psycopg2.connect(url)
+                self.connections[region] = conn
+                statuses[region] = {"ok": True}
+            except Exception as e:
+                statuses[region] = {"ok": False, "error": str(e)}
+
+        return statuses
+
+    def get_connection_for_region(self, region_key, allow_backup=True):
+        """Return (conn, used_region, created_flag).
+
+        Attempt to return an existing live connection for region_key. If not
+        present/open, try to connect to the primary DSN. If that fails and
+        allow_backup is True, attempt to connect to the configured backup DSN.
+        """
+        if not region_key:
+            region_key = 'us-west'
+
+        # Prefer an existing open connection
+        existing = self.connections.get(region_key)
+        try:
+            if existing and getattr(existing, 'closed', 1) == 0:
+                return existing, region_key, False
+        except Exception:
+            pass
+
+        # Try primary DSN
+        primary_dsn = None
+        try:
+            primary_dsn = self.getURL({'region': region_key})
+        except Exception:
+            primary_dsn = None
+
+        if primary_dsn:
+            try:
+                conn = psycopg2.connect(primary_dsn)
+                return conn, region_key, True
+            except Exception as e:
+                print(f"Primary connect failed for {region_key}: {e}")
+
+        # Try backup
+        if allow_backup:
+            try:
+                backup_dsn = self.__getReplicaURL({'region': region_key})
+            except Exception:
+                backup_dsn = None
+            if backup_dsn:
+                try:
+                    conn = psycopg2.connect(backup_dsn)
+                    # find backup region key by matching LOCAL_URLS value
+                    backup_region = None
+                    for k, v in LOCAL_URLS.items():
+                        if v == backup_dsn:
+                            backup_region = k
+                            break
+                    return conn, backup_region or region_key, True
+                except Exception as e:
+                    print(f"Backup connect failed for {region_key}: {e}")
+
+        return None, None, False
     
 
     def getURLFromState(self,data):
@@ -123,12 +212,12 @@ class DBClient:
     
     def getURL(self,data):
         state = data.get("region")
-        
-        return LOCAL_URLS[state]
+        # return the configured URL for this region or None
+        return LOCAL_URLS.get(state)
     
     def __getReplicaURL(self,data):
         state = data.get("region")
-        return BACKUP_URLS[state]
+        return BACKUP_URLS.get(state)
 
     
     def fetchUserData(self, user_id,state):
@@ -226,13 +315,16 @@ class DBClient:
             else:
                 where_parts.append(f'"{col}" {op} %s')
                 params.append(val)
+        # Enforce donor-only filter if requested (safety: add even if callers forgot)
+        if donor_only:
+            # Only add once, outside the per-filter loop
+            where_parts.append('"is_organ_donor" = %s')
+            params.append(True)
 
-            # Enforce donor-only filter if requested (safety: add even if callers forgot)
-            if donor_only:
-                where_parts.append('"is_organ_donor" = %s')
-                params.append(True)
-
-            where_clause = (' WHERE ' + ' AND '.join(where_parts)) if where_parts else ''
+        # Compose a single WHERE clause from parts (don't prefix yet so we can append more conditions safely)
+        where_expr = ' AND '.join(where_parts) if where_parts else ''
+        where_clause = (' WHERE ' + where_expr) if where_expr else ''
+        print("1")
 
         # Resolve the physical patients table name for this region
         def _patients_table_for_region(region_key):
@@ -245,6 +337,7 @@ class DBClient:
             return 'patients_central'
 
         table_name = _patients_table_for_region(region)
+        print("2")
 
         # If center coordinates provided, include distance using haversine_km
         use_distance = (center_lat is not None and center_lon is not None)
@@ -252,7 +345,11 @@ class DBClient:
             cols_sql = ', '.join(f'"{c}"' for c in COLS)
             # compute distance_km using DB function haversine_km(lat, lon, center_lat, center_lon)
             cols_sql = cols_sql + ", " + f"haversine_km(\"lat\", \"lon\", %s, %s) AS distance_km"
-            sql = f'SELECT {cols_sql} FROM {table_name}{where_clause} WHERE \"lat\" IS NOT NULL AND \"lon\" IS NOT NULL ORDER BY distance_km ASC LIMIT %s;'
+            # If we already have a WHERE clause, append the lat/lon checks with AND, otherwise start a WHERE
+            if where_clause:
+                sql = f'SELECT {cols_sql} FROM {table_name}{where_clause} AND "lat" IS NOT NULL AND "lon" IS NOT NULL ORDER BY distance_km ASC LIMIT %s;'
+            else:
+                sql = f'SELECT {cols_sql} FROM {table_name} WHERE "lat" IS NOT NULL AND "lon" IS NOT NULL ORDER BY distance_km ASC LIMIT %s;'
             params.insert(0, center_lon)  # careful: we'll append center_lat then center_lon in correct order
             params.insert(0, center_lat)
             params.append(limit)
@@ -260,12 +357,14 @@ class DBClient:
             cols_sql = ', '.join(f'"{c}"' for c in COLS)
             sql = f'SELECT {cols_sql} FROM {table_name}{where_clause} ORDER BY "Patient_ID" LIMIT %s;'
             params.append(limit)
+        print("3")
 
         conn = self.connections.get(region)
         if conn is None:
             # Fall back to default mapping via getURL
             dsn = self.getURL({'region': region})
             conn = psycopg2.connect(dsn)
+            print("4")
 
         try:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -282,12 +381,39 @@ class DBClient:
         Polls outbox_events, sends new rows to replica DB, and marks processed ones.
         """
         print(" Starting replication loop...")
-        SOURCE_DSN = self.getURL({"region": "us-west"}) #"postgresql://root@localhost:26257/west?sslmode=disable"
-        REPLICA_DSN =  self.__getReplicaURL({"region": "us-west"})#"postgresql://root@localhost:26260/west?sslmode=disable"
+        # Primary region we replicate from (logical)
+        primary_region = 'us-west'
         while True:
             try:
-                src_conn = psycopg2.connect(SOURCE_DSN)
-                src_cur  = src_conn.cursor()
+                # Compute primary and backup DSNs for this logical pair
+                primary_dsn = self.getURL({"region": primary_region})
+                backup_dsn = self.__getReplicaURL({"region": primary_region})
+
+                # Prefer using primary as source; if it's unavailable, use backup as source
+                src_conn = None
+                repl_dsn = None
+                try:
+                    if primary_dsn:
+                        src_conn = psycopg2.connect(primary_dsn)
+                        repl_dsn = backup_dsn
+                    else:
+                        raise Exception("no primary dsn")
+                except Exception:
+                    # primary not reachable, try backup as source
+                    if backup_dsn:
+                        try:
+                            src_conn = psycopg2.connect(backup_dsn)
+                            repl_dsn = primary_dsn
+                        except Exception as e:
+                            print("Neither primary nor backup reachable for replication pair:", e)
+                            time.sleep(5)
+                            continue
+                    else:
+                        # nothing to do until endpoints are configured
+                        time.sleep(5)
+                        continue
+
+                src_cur = src_conn.cursor()
                 print("Connected to Source")
 
                 # Fetch unprocessed events
@@ -308,8 +434,13 @@ class DBClient:
                     time.sleep(5)
                     continue
 
-                # Process events
-                repl_conn = psycopg2.connect(REPLICA_DSN)
+                # Process events: connect to replica (the other side)
+                if not repl_dsn:
+                    print("No replica DSN configured for this replication pair; skipping until configured")
+                    src_cur.close(); src_conn.close()
+                    time.sleep(5)
+                    continue
+                repl_conn = psycopg2.connect(repl_dsn)
                 repl_cur  = repl_conn.cursor()
 
                 for event_id, table, op, payload in events:
@@ -500,8 +631,10 @@ class DBClient:
             sql = f'INSERT INTO {table_name} ({cols_sql}) VALUES ({placeholders});'
         print(f"cp4 {self.getURLFromState({'state':normalized_row.get('State')})}")
 
-        conn = self.connections.get(normalized_row.get("Region"))
-        print("CP5 ",conn)
+        # Obtain a connection for the region, with failover to backup if primary unavailable
+        preferred_region = normalized_row.get('Region') or self.region_map.get(normalized_row.get('State'))
+        conn, used_region, created_conn = self.get_connection_for_region(preferred_region, allow_backup=True)
+        print("CP5 ", conn, "used_region:", used_region, "created_conn:", created_conn)
 
         print(f"Executing SQL: {sql} with values {tup} into {conn}")
 
@@ -511,11 +644,13 @@ class DBClient:
             "rows": None,
         }
 
+        if conn is None:
+            return {"status": "error", "message": "No available DB connection for region", "metrics": metrics}
+
         try:
             t0 = time.time()
             with conn.cursor() as cur:
                 cur.execute(sql, tup)
-                # rows affected may be available via cur.rowcount
                 metrics["rows"] = cur.rowcount
             conn.commit()
             metrics["insert_time_ms"] = int((time.time() - t0) * 1000)
@@ -533,6 +668,13 @@ class DBClient:
         except Exception as e:
             # attempt to include any timing we may have captured
             return {"status": "error", "message": str(e), "metrics": metrics}
+        finally:
+            # close any ephemeral connection we created (do not close pooled connections)
+            try:
+                if created_conn and conn is not None:
+                    conn.close()
+            except Exception:
+                pass
 
     def bulk_insert_patients(self,conn, rows, batch_size=1000, upsert=True):
         """
@@ -564,6 +706,12 @@ class DBClient:
         else:
             sql = f'INSERT INTO {table_name} ({cols_sql}) VALUES ({placeholders});'
 
+        created_conn = False
+        if conn is None:
+            conn, used_region, created_conn = self.get_connection_for_region(first_region, allow_backup=True)
+        if conn is None:
+            raise RuntimeError("No available DB connection for bulk insert")
+
         with conn.cursor() as cur:
             execute_batch(cur, sql, tuples, page_size=batch_size)
             # Insert corresponding outbox events so replication can pick these up.
@@ -579,8 +727,14 @@ class DBClient:
                 # don't fail the bulk insert if outbox insertion has issues; record/logging can be added
                 pass
         conn.commit()
+        # close ephemeral connection created for this bulk operation
+        try:
+            if created_conn and conn is not None:
+                conn.close()
+        except Exception:
+            pass
 
-    def bulk_insert_doctors(self, conn, rows, batch_size=1000, upsert=True):
+    def bulk_insert_doctors(self, conn, rows, batch_size=1000, upsert=True, region="us-west"):
         """
         Insert or upsert into doctors.
         - conn: psycopg2 connection
@@ -615,6 +769,12 @@ class DBClient:
         else:
             sql = f'INSERT INTO doctors ({cols_sql}) VALUES ({placeholders});'
 
+        created_conn = False
+        if conn is None:
+            conn, used_region, created_conn = self.get_connection_for_region(region, allow_backup=True)
+        if conn is None:
+            raise RuntimeError("No available DB connection for bulk insert doctors")
+
         with conn.cursor() as cur:
             execute_batch(cur, sql, tuples, page_size=batch_size)
             # Insert corresponding outbox events for doctors
@@ -628,6 +788,11 @@ class DBClient:
             except Exception:
                 pass
         conn.commit()
+        try:
+            if created_conn and conn is not None:
+                conn.close()
+        except Exception:
+            pass
 
     def loadDoctorData(self,conn):
         paths="./data/Doctors.csv"

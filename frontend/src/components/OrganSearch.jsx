@@ -103,26 +103,26 @@ export default function OrganSearch() {
                     <div className="overflow-auto mt-3 border rounded bg-white">
                         <table className="min-w-full text-sm">
                             <thead className="bg-gray-100"><tr>
-                                <th className="px-2 py-1 text-left">Donor Patient_ID</th>
-                                <th className="px-2 py-1 text-left">Distance</th>
-                                <th className="px-2 py-1 text-left">Patient_Name</th>
-                                <th className="px-2 py-1 text-left">Age</th>
-                                <th className="px-2 py-1 text-left">Gender</th>
-                                <th className="px-2 py-1 text-left">Address</th>
-                                <th className="px-2 py-1 text-left">State</th>
-                                <th className="px-2 py-1 text-left">Doctor / Hospital</th>
+                                <th className="px-2 py-1 text-left text-black">Donor Patient_ID</th>
+                                <th className="px-2 py-1 text-left text-black">Distance</th>
+                                <th className="px-2 py-1 text-left text-black">Patient_Name</th>
+                                <th className="px-2 py-1 text-left text-black">Age</th>
+                                <th className="px-2 py-1 text-left text-black">Gender</th>
+                                <th className="px-2 py-1 text-left text-black">Address</th>
+                                <th className="px-2 py-1 text-left text-black">State</th>
+                                <th className="px-2 py-1 text-left text-black">Doctor / Hospital</th>
                             </tr></thead>
                             <tbody>
                                 {results.map((r, idx) => (
                                     <tr key={r.Patient_ID || idx} className="border-t">
-                                        <td className="px-2 py-1">{r.Patient_ID || r.id}</td>
-                                        <td className="px-2 py-1">{(r.distance_km !== undefined && r.distance_km !== null) ? `${Number(r.distance_km).toFixed(2)} km` : ''}</td>
-                                        <td className="px-2 py-1">{r.Patient_Name || `${r.first_name || ''} ${r.last_name || ''}`}</td>
-                                        <td className="px-2 py-1">{r.Age || r.age}</td>
-                                        <td className="px-2 py-1">{r.Gender || r.gender}</td>
-                                        <td className="px-2 py-1">{r.Address || r.City || ''}</td>
-                                        <td className="px-2 py-1">{r.State}</td>
-                                        <td className="px-2 py-1">{r.Doctor_Name || r['Doctor Appointed'] || r['Hospital Name'] || r.doctor_hospital || ''}</td>
+                                        <td className="px-2 py-1 text-black">{r.Patient_ID || r.id}</td>
+                                        <td className="px-2 py-1 text-black">{(r.distance_km !== undefined && r.distance_km !== null) ? `${Number(r.distance_km).toFixed(2)} km` : ''}</td>
+                                        <td className="px-2 py-1 text-black">{r.Patient_Name || `${r.first_name || ''} ${r.last_name || ''}`}</td>
+                                        <td className="px-2 py-1 text-black">{r.Age || r.age}</td>
+                                        <td className="px-2 py-1 text-black">{r.Gender || r.gender}</td>
+                                        <td className="px-2 py-1 text-black">{r.Address || r.City || ''}</td>
+                                        <td className="px-2 py-1 text-black">{r.State}</td>
+                                        <td className="px-2 py-1 text-black">{r.Doctor_Name || r['Doctor Appointed'] || r['Hospital Name'] || r.doctor_hospital || ''}</td>
                                     </tr>
                                 ))}
                             </tbody>

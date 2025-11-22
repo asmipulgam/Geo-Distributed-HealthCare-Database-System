@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 
 function Histogram({ data, valueAccessor, buckets = 10, width = 600, height = 200 }) {
@@ -36,11 +36,16 @@ function Histogram({ data, valueAccessor, buckets = 10, width = 600, height = 20
 }
 
 function Pie({ data, accessor, width = 200, height = 200 }) {
-    const counts = {};
-    data.forEach(d => {
-        const k = accessor(d) ?? 'Unknown';
-        counts[k] = (counts[k] || 0) + 1;
-    });
+    // Accept either an array of items with accessor or a counts object {key: count}
+    let counts = {};
+    if (!Array.isArray(data) && data && typeof data === 'object') {
+        counts = data;
+    } else {
+        data.forEach(d => {
+            const k = accessor(d) ?? 'Unknown';
+            counts[k] = (counts[k] || 0) + 1;
+        });
+    }
     const total = Object.values(counts).reduce((a,b)=>a+b,0) || 1;
     let angle = 0;
     const cx = width/2, cy = height/2, r = Math.min(width, height)/2 - 10;
@@ -66,15 +71,25 @@ function Pie({ data, accessor, width = 200, height = 200 }) {
 
 export default function AnalyticsPage() {
     const { state } = useLocation();
-    const rows = (state && state.rows) || [];
+    const [analytics, setAnalytics] = useState(null);
+    const [loading, setLoading] = useState(false);
+    useEffect(() => {
+        setLoading(true);
+        fetch('/api/analytics/summary')
+            .then(r => r.json())
+            .then(d => { setAnalytics(d); setLoading(false); })
+            .catch(e => { console.error('analytics fetch', e); setLoading(false); });
+    }, []);
 
-    const ages = rows.map(r => Number(r.age)).filter(v => !isNaN(v));
-    const genderCounts = rows.reduce((acc, r) => {
+    const rows = analytics?.sample_rows || ((state && state.rows) || []);
+
+    const ages = analytics ? (analytics.ages || []) : rows.map(r => Number(r.age)).filter(v => !isNaN(v));
+    const genderCounts = analytics ? (analytics.gender || {}) : rows.reduce((acc, r) => {
         const g = (r.gender || 'Unknown')
         acc[g] = (acc[g] || 0) + 1; return acc;
     }, {});
 
-    const byState = rows.reduce((acc, r) => {
+    const byState = analytics ? (analytics.by_state || {}) : rows.reduce((acc, r) => {
         const s = (r.State || 'Unknown'); acc[s] = (acc[s] || 0) + 1; return acc;
     }, {});
 
@@ -89,12 +104,16 @@ export default function AnalyticsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-white p-4 rounded shadow">
                         <h3 className="font-medium mb-2">Age distribution</h3>
-                        {rows.length ? <Histogram data={rows} valueAccessor={r=>r.age} buckets={10} /> : <div>No data</div>}
+                        { (analytics ? (ages && ages.length) : rows.length) ? (
+                            analytics ? <Histogram data={ages} valueAccessor={v=>v} buckets={10} /> : <Histogram data={rows} valueAccessor={r=>r.age} buckets={10} />
+                        ) : <div>No data</div>}
                     </div>
 
                     <div className="bg-white p-4 rounded shadow">
                         <h3 className="font-medium mb-2">Gender breakdown</h3>
-                        {rows.length ? <Pie data={rows} accessor={r=>r.gender} /> : <div>No data</div>}
+                        { (analytics ? Object.keys(genderCounts).length>0 : rows.length) ? (
+                            analytics ? <Pie data={genderCounts} accessor={r=>r.gender} /> : <Pie data={rows} accessor={r=>r.gender} />
+                        ) : <div>No data</div>}
                     </div>
 
                     <div className="bg-white p-4 rounded shadow col-span-1 md:col-span-2">

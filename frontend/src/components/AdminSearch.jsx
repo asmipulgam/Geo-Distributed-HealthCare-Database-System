@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BACKEND_URL } from './constants';
 
@@ -13,7 +13,7 @@ function buildWhereClause(filters) {
     const parts = filters
         .filter(f => f.col && f.op && f.val !== undefined && f.val !== '')
         .map(f => {
-            const col = `\"${f.col}\"`;
+            const col = `"${f.col}"`;
             if (f.op === 'IN') {
                 // assume comma-separated values
                 const vals = f.val.split(',').map(v => v.trim()).filter(Boolean);
@@ -37,7 +37,105 @@ export default function AdminSearch() {
     const [sqlPreview, setSqlPreview] = useState('');
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
+    const [columnMap, setColumnMap] = useState({});
+    const [showDebug, setShowDebug] = useState(true);
+    
+    // Log results when they change (avoids inline console.log in JSX)
+    useEffect(() => {
+        if (results && results.length) console.debug('AdminSearch results:', results.slice(0,3));
+        // build a columnMap from the first result for faster/more predictable lookups
+        if (results && results.length > 0) {
+            const first = results[0];
+            const m = {};
+            for (const c of COLS) {
+                const k = getMatchedKey(first, c);
+                if (k) m[c] = k;
+            }
+            setColumnMap(m);
+        } else {
+            setColumnMap({});
+        }
+    }, [results]);
 
+    // Helper: robustly extract a column value from a row object even when
+    // the backend uses different key casing/format (e.g., patient_id, Patient_ID, patientId)
+    function getValueFromRow(row, col) {
+        if (!row) return '';
+
+        // If row is an array-like or wrapped, try to unwrap to the first object
+        function unwrap(r) {
+            if (!r) return r;
+            if (Array.isArray(r) && r.length > 0 && typeof r[0] === 'object') return r[0];
+            // if r has a single key whose value is an object, unwrap that
+            const keys = Object.keys(r || {});
+            if (keys.length === 1 && typeof r[keys[0]] === 'object') return r[keys[0]];
+            return r;
+        }
+
+        const src = unwrap(row);
+        if (!src) return '';
+
+        // direct hit
+        if (Object.prototype.hasOwnProperty.call(src, col)) return src[col];
+
+        const normalizedCol = String(col).replace(/[^a-z0-9]/gi, '').toLowerCase();
+
+        // try obvious variants
+        const variants = [
+            col,
+            col.toLowerCase(),
+            col.toUpperCase(),
+            col.replace(/_/g, ' ').toLowerCase(),
+            col.replace(/ /g, '_').toLowerCase(),
+            // snake-case from CamelCase
+            col.replace(/([A-Z])/g, '_$1').toLowerCase(),
+            // camelCase
+            col.toLowerCase().replace(/_([a-z])/g, (_, g) => g.toUpperCase()),
+        ];
+
+        for (const v of variants) {
+            if (v && Object.prototype.hasOwnProperty.call(src, v)) return src[v];
+        }
+
+        // fall back to fuzzy matching of keys (ignore non-alphanum and case)
+        for (const k of Object.keys(src)) {
+            const nk = String(k).replace(/[^a-z0-9]/gi, '').toLowerCase();
+            if (nk === normalizedCol) return src[k];
+        }
+
+        return '';
+    }
+
+    // Return the key name in `row` that matches the display `col`, or null.
+    function getMatchedKey(row, col) {
+        if (!row) return null;
+        function unwrap(r) {
+            if (!r) return r;
+            if (Array.isArray(r) && r.length > 0 && typeof r[0] === 'object') return r[0];
+            const keys = Object.keys(r || {});
+            if (keys.length === 1 && typeof r[keys[0]] === 'object') return r[keys[0]];
+            return r;
+        }
+        const src = unwrap(row);
+        if (!src) return null;
+        if (Object.prototype.hasOwnProperty.call(src, col)) return col;
+        const normalizedCol = String(col).replace(/[^a-z0-9]/gi, '').toLowerCase();
+        const variants = [
+            col,
+            col.toLowerCase(),
+            col.toUpperCase(),
+            col.replace(/_/g, ' ').toLowerCase(),
+            col.replace(/ /g, '_').toLowerCase(),
+            col.replace(/([A-Z])/g, '_$1').toLowerCase(),
+            col.toLowerCase().replace(/_([a-z])/g, (_, g) => g.toUpperCase()),
+        ];
+        for (const v of variants) if (v && Object.prototype.hasOwnProperty.call(src, v)) return v;
+        for (const k of Object.keys(src)) {
+            const nk = String(k).replace(/[^a-z0-9]/gi, '').toLowerCase();
+            if (nk === normalizedCol) return k;
+        }
+        return null;
+    }
     function updateFilter(i, key, value) {
         const next = [...filters];
         next[i] = { ...next[i], [key]: value };
@@ -58,7 +156,7 @@ export default function AdminSearch() {
         try {
             // Build SQL preview
             const where = buildWhereClause(filters);
-            const sql = `SELECT * FROM patients ${where} LIMIT 1000;`;
+            const sql = `SELECT * FROM patients ${where} LIMIT 10;`;
             setSqlPreview(sql);
 
             // Try backend search endpoint first (if implemented)
@@ -72,6 +170,7 @@ export default function AdminSearch() {
                 if (res.ok) {
                     data = await res.json();
                     // expected: { records: [...] }
+                    console.log('Backend search data', data.records );
                     if (data && data.records) {
                         setResults(data.records);
                         setLoading(false);
@@ -80,10 +179,11 @@ export default function AdminSearch() {
                 }
             } catch (err) {
                 // ignore and fallback to client-side filtering
+                console.error('Backend search error', err);
             }
 
             // Fallback: fetch a larger page from /api/all, then filter client-side
-            const pageRes = await fetch(`${BACKEND_URL}/api/all?region=${region}&page_size=1000`);
+            const pageRes = await fetch(`${BACKEND_URL}/api/all?region=${region}&page_size=10`);
             const page = await pageRes.json();
             const rows = page.records || [];
 
@@ -118,7 +218,6 @@ export default function AdminSearch() {
     }
 
     function openAnalytics() {
-        // Navigate to analytics page and pass results in state
         navigate('/analytics', { state: { rows: results } });
     }
 
@@ -170,20 +269,27 @@ export default function AdminSearch() {
                             <table className="min-w-full text-sm">
                                 <thead className="bg-gray-100">
                                     <tr>
-                                        {COLS.map(c => <th key={c} className="px-2 py-1 text-left">{c}</th>)}
+                                        {COLS.map(c => <th key={c} className="px-2 py-1 text-center text-black">{c}</th>)}
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {results.map((r, idx) => (
-                                        <tr key={idx} className="border-t">
-                                            {COLS.map(c => <td key={c} className="px-2 py-1">{String(r[c] ?? '')}</td>)}
-                                        </tr>
-                                    ))}
+                                        {results.map((r, idx) => (
+                                            <tr key={idx} className="border-t">
+                                                {COLS.map(c => {
+                                                    
+                                                    // prefer the mapped key if available, otherwise fallback to fuzzy getter
+                                                    const mapped = columnMap[c];
+                                                    const val = mapped && Object.prototype.hasOwnProperty.call(r, mapped) ? r[mapped] : getValueFromRow(r, c);
+                                                    return <td key={c} className="px-2 py-1 text-black">{val}</td>;
+                                                })}
+                                            </tr>
+                                        ))}
                                 </tbody>
                             </table>
                         </div>
                     )}
                 </div>
+               
             </div>
         </div>
     );

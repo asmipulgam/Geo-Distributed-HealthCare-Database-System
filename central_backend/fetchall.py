@@ -73,6 +73,7 @@ class FetchAll:
             # total count to determine next existence
             cur.execute(f"SELECT COUNT(*) AS cnt FROM {self.table_name};")
             total = cur.fetchone()["cnt"] or 0
+            print("1")
 
             try:
                 offset = int(cursor or 0)
@@ -96,29 +97,29 @@ class FetchAll:
             # Attempt to capture a planner cost estimate via EXPLAIN (FORMAT JSON).
             explain_json = None
             explain_time_ms = None
-            try:
-                t0 = time.time()
-                cur.execute("EXPLAIN (FORMAT JSON) " + select_sql, (page_size, offset))
-                explain_time_ms = int((time.time() - t0) * 1000)
-                erow = cur.fetchone()
-                if erow:
-                    # RealDictCursor returns a dict-like row; take the first value which is usually the JSON text
-                    if isinstance(erow, dict):
-                        first_val = next(iter(erow.values()))
-                    elif isinstance(erow, (list, tuple)):
-                        first_val = erow[0]
-                    else:
-                        first_val = erow
+            # try:
+            #     t0 = time.time()
+            #     cur.execute("EXPLAIN (FORMAT JSON) " + select_sql, (page_size, offset))
+            #     explain_time_ms = int((time.time() - t0) * 1000)
+            #     erow = cur.fetchone()
+            #     if erow:
+            #         # RealDictCursor returns a dict-like row; take the first value which is usually the JSON text
+            #         if isinstance(erow, dict):
+            #             first_val = next(iter(erow.values()))
+            #         elif isinstance(erow, (list, tuple)):
+            #             first_val = erow[0]
+            #         else:
+            #             first_val = erow
 
-                    # Try to parse JSON; some drivers already return parsed JSON
-                    try:
-                        explain_json = json.loads(first_val) if isinstance(first_val, (str, bytes)) else first_val
-                    except Exception:
-                        explain_json = first_val
-            except Exception:
-                # EXPLAIN may not be supported or may fail on some clusters; ignore rather than crash
-                explain_json = None
-                explain_time_ms = None
+            #         # Try to parse JSON; some drivers already return parsed JSON
+            #         try:
+            #             explain_json = json.loads(first_val) if isinstance(first_val, (str, bytes)) else first_val
+            #         except Exception:
+            #             explain_json = first_val
+            # except Exception:
+            #     # EXPLAIN may not be supported or may fail on some clusters; ignore rather than crash
+            #     explain_json = None
+            #     explain_time_ms = None
 
             # Execute the actual select and time it
             t0 = time.time()

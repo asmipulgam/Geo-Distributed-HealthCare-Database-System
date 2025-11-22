@@ -40,8 +40,7 @@ export default function Login() {
   const [healthIdTouched, setHealthIdTouched] = useState(false)
   const healthIdError = useMemo(() => {
     if (!healthId) return 'Health ID is required'
-    if (!isDigits(healthId)) return 'Health ID must be numeric'
-    if (healthId.length < 6) return 'Health ID must be at least 6 digits'
+    if (healthId.length < 9) return 'Health ID must be at least 6 digits with prefix PT-'
     return null
   }, [healthId])
 
