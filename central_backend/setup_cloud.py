@@ -5,8 +5,8 @@ import platform
 
 CONNECTION_URLS = {
     "west": "",
-    #"east": "",
-    #"central": ""
+    "east": "",
+    "central": ""
 }
 
 SCHEMA_FILES = {
@@ -17,16 +17,18 @@ SCHEMA_FILES = {
 
 
 CERTS_COMMANDS_MAC_OR_LINUX = [
-    "curl --create-dirs -o $HOME/.postgresql/root.crt 'https://cockroachlabs.cloud/clusters/0fa9e1ef-c4a6-4fab-9073-947413d38e6b/cert'",
-    "curl --create-dirs -o $HOME/.postgresql/root.crt 'https://cockroachlabs.cloud/clusters/fa15bf40-4264-454b-a7f8-d067cbd289e9/cert''",
+    "curl --create-dirs -o $HOME/.postgresql/root_west.crt https://cockroachlabs.cloud/clusters/0fa9e1ef-c4a6-4fab-9073-947413d38e6b/cert", # west
+    "curl --create-dirs -o $HOME/.postgresql/root_central.crt https://cockroachlabs.cloud/clusters/fa15bf40-4264-454b-a7f8-d067cbd289e9/cert", # central
+    "curl --create-dirs -o $HOME/.postgresql/root_east.crt https://cockroachlabs.cloud/clusters/0b7cee76-dc84-441d-9417-b7274fb36cdc/cert" # east
 ]
 
 CERTS_COMMANDS_WINDOWS = [
-    "mkdir -p $env:appdata\\postgresql\\; Invoke-WebRequest -Uri https://cockroachlabs.cloud/clusters/588e784c-737a-46ea-a410-05ffbba8bd85/cert -OutFile $env:appdata\\postgresql\\root.crt",
-    "mkdir -p $env:appdata\\postgresql\\; Invoke-WebRequest -Uri https://cockroachlabs.cloud/clusters/1d782d03-e0b2-4caa-9383-384877b74427/cert -OutFile $env:appdata\\postgresql\\root.crt",
+    "mkdir -p $env:appdata\\postgresql\\; Invoke-WebRequest -Uri https://cockroachlabs.cloud/clusters/0fa9e1ef-c4a6-4fab-9073-947413d38e6b/cert -OutFile $env:appdata\\postgresql\\root_west.crt",
+    "mkdir -p $env:appdata\\postgresql\\; Invoke-WebRequest -Uri https://cockroachlabs.cloud/clusters/fa15bf40-4264-454b-a7f8-d067cbd289e9/cert -OutFile $env:appdata\\postgresql\\root_central.crt",
+    "mkdir -p $env:appdata\\postgresql\\; Invoke-WebRequest -Uri https://cockroachlabs.cloud/clusters/0b7cee76-dc84-441d-9417-b7274fb36cdc/cert -OutFile $env:appdata\\postgresql\\root_east.crt"
 ]
 
-def getFormattedURL(raw_url, useSecure = False):
+def getFormattedURL(raw_url, useSecure = True):
     if useSecure:
         return f"{raw_url}?sslmode=verify-full"
     else:
@@ -37,8 +39,8 @@ def readUrls():
     config.read('database.conf')
     useSecure = config.getint('DEFAULT', 'useSecureMode') == 1
     CONNECTION_URLS["west"] = getFormattedURL(config.get('DEFAULT', 'westURL'), useSecure)
-    #CONNECTION_URLS["east"] = getFormattedURL(config.get('DEFAULT', 'eastURL'), useSecure)
-    #CONNECTION_URLS["central"] = getFormattedURL(config.get('DEFAULT', 'centralURL'), useSecure)
+    CONNECTION_URLS["east"] = getFormattedURL(config.get('DEFAULT', 'eastURL'), useSecure)
+    CONNECTION_URLS["central"] = getFormattedURL(config.get('DEFAULT', 'centralURL'), useSecure)
 
 def setupDatabase(connection_url, region, sql_file=None):
     """
@@ -116,6 +118,7 @@ if __name__ == "__main__":
     else:
         for cmd in CERTS_COMMANDS_MAC_OR_LINUX:
             os.system(cmd)
+            print(cmd)
 
-    setup_func()
+    #setup_func()
     

@@ -3,6 +3,7 @@ import csv
 import random
 import usgeocoder
 from uszipcode import SearchEngine
+from pathlib import Path
 
 search = SearchEngine()  # faster
 
@@ -11,10 +12,10 @@ fake = Faker('en_US')
 # ----------------------------
 # CONFIGURATION
 # ----------------------------
-NUM_DOCTORS = 3000
-PATIENTS_PER_REGION = 9000
+NUM_DOCTORS = 10000
+PATIENTS_PER_REGION = 90000
 # Regions to generate
-REGIONS = ["us-west", "us-central", "us-east"]
+REGIONS = ["us-west", "us-central"]#, "us-east"]
 
 # State -> region mapping (as provided)
 STATE_TO_REGION = {
@@ -158,29 +159,33 @@ def generate_doctors(num_doctors):
 
 
 def save_doctors_csv(doctors):
-    with open("Doctors.csv", "w", newline='', encoding="utf-8") as file:
+    data_dir = Path(__file__).resolve().parent.parent / 'central_backend' / 'data'
+    data_dir.mkdir(parents=True, exist_ok=True)
+    out_path = data_dir / "Doctors.csv"
+    with out_path.open("w", newline='', encoding="utf-8") as file:
         writer = csv.writer(file)
         writer.writerow(["Doctor_ID", "Doctor_Name", "Hospital", "Region"])
         for d in doctors:
             writer.writerow([d["Doctor_ID"], d["Doctor_Name"], d["Hospital"], d["Region"]])
-    print(f"✅ {len(doctors)} doctor records written → Doctors.csv")
+    print(f"{len(doctors)} doctor records written → {out_path}")
 
 
 # ----------------------------
 # STEP 2: Generate Patient Tables + Locations
 # ----------------------------
 def generate_patients(region, doctors, count):
-    patient_file = f"Patients_{region.upper()}.csv"
-    location_file = f"Patient_Location_{region.upper()}.csv"
+    data_dir = Path(__file__).resolve().parent.parent / 'central_backend' / 'data'
+    data_dir.mkdir(parents=True, exist_ok=True)
+    patient_file = data_dir / f"Patients_{region.upper()}.csv"
 
-    with open(patient_file, "w", newline="", encoding="utf-8") as pf:
+    with patient_file.open("w", newline="", encoding="utf-8") as pf:
         
         patient_writer = csv.writer(pf)
 
         # Headers (Phone removed) — use boolean is_organ_donor column
         patient_writer.writerow([
             "Patient_ID", "Patient_Name", "Doctor_ID", "Doctor_Name",
-            "Age", "Gender", "Email", "Address", "State",
+            "Age", "Gender", "Phone","Email", "Address", "State",
             "Region", "Appointment_Date", "Diagnosis", "Date_of_Birth", "is_organ_donor",
             "lat","lon"
         ])
@@ -237,6 +242,7 @@ def generate_patients(region, doctors, count):
                 doctor["Doctor_Name"],
                 age,
                 gender,
+                fake.phone_number(),
                 fake.email(),
                 address,
                 state_choice,
@@ -252,8 +258,7 @@ def generate_patients(region, doctors, count):
                 lon
             ])
 
-    print(f"✅ {count} unique patient records generated for {region} → {patient_file}")
-    print(f"📍 Organ donor locations saved → {location_file}")
+    print(f" {count} unique patient records generated for {region} → {patient_file}")
 
 
 # ----------------------------
@@ -266,4 +271,4 @@ if __name__ == "__main__":
     for region in REGIONS:
         generate_patients(region, doctors, PATIENTS_PER_REGION)
 
-    print("🎯 All regional doctor, patient, and organ donor location files generated successfully.")
+    print(" All regional doctor and patient records generated successfully.")
