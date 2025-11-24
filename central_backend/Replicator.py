@@ -7,6 +7,7 @@ import json
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from client import COLS, DOCTOR_COLS
+from datetime import datetime
 
 class Replicator:
     """
@@ -35,7 +36,7 @@ class Replicator:
         # Allow a DB client to be provided directly as a keyword argument
         db_client: Optional[Any] = None,
         # Maximum run time in seconds for this replicator (None to run indefinitely)
-        max_run_seconds: Optional[float] = 300,
+        max_run_seconds: Optional[float] = 6000,
         run_on_start: bool = False,
         name: Optional[str] = None,
         daemon: bool = True,
@@ -93,7 +94,7 @@ class Replicator:
                 try:
                     # If a DB client was provided, run the internal replicate logic
                     if self._db_client:
-                        self._logger.info("Running initial replicate_once (run_on_start)")
+                        self._logger.info(f"Running initial replicate_once (run_on_start) at time {datetime.now().isoformat()}Z")
                         self._replicate_once()
                     else:
                         self._target(*self._args, **self._kwargs)

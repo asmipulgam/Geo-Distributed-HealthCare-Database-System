@@ -32,13 +32,14 @@ function buildWhereClause(filters) {
 
 export default function AdminSearch() {
     const [filters, setFilters] = useState([{ col: 'Patient_ID', op: '=', val: '' }]);
-    const [region, setRegion] = useState('us-west');
+    // allow selecting multiple regions for distributed search
+    const [regions, setRegions] = useState(['us-west']);
+    const [limit, setLimit] = useState(10);
     const [results, setResults] = useState([]);
     const [sqlPreview, setSqlPreview] = useState('');
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
     const [columnMap, setColumnMap] = useState({});
-    const [showDebug, setShowDebug] = useState(true);
     
     // Log results when they change (avoids inline console.log in JSX)
     useEffect(() => {
@@ -165,7 +166,7 @@ export default function AdminSearch() {
                 const res = await fetch(`${BACKEND_URL}/api/search`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ region, filters }),
+                    body: JSON.stringify({ regions, filters, limit }),
                 });
                 if (res.ok) {
                     data = await res.json();
@@ -182,8 +183,9 @@ export default function AdminSearch() {
                 console.error('Backend search error', err);
             }
 
-            // Fallback: fetch a larger page from /api/all, then filter client-side
-            const pageRes = await fetch(`${BACKEND_URL}/api/all?region=${region}&page_size=10`);
+            // Fallback: fetch a larger page from /api/all (use first selected region), then filter client-side
+            const fallbackRegion = (regions && regions.length) ? regions[0] : 'us-west';
+            const pageRes = await fetch(`${BACKEND_URL}/api/all?region=${fallbackRegion}&page_size=10`);
             const page = await pageRes.json();
             const rows = page.records || [];
 
@@ -227,8 +229,8 @@ export default function AdminSearch() {
                 <h1 className="text-2xl font-bold mb-4">Admin Search</h1>
 
                 <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Region</label>
-                    <select className="mt-1 p-2 border rounded" value={region} onChange={e => setRegion(e.target.value)}>
+                    <label className="block text-sm font-medium text-gray-700">Regions (hold Ctrl/Cmd to select multiple)</label>
+                    <select multiple className="mt-1 p-2 border rounded h-32" value={regions} onChange={e => setRegions(Array.from(e.target.selectedOptions).map(o => o.value))}>
                         <option value="us-west">us-west</option>
                         <option value="us-central">us-central</option>
                         <option value="us-east">us-east</option>
@@ -250,6 +252,10 @@ export default function AdminSearch() {
                     ))}
 
                     <div className="flex gap-2">
+                        <div className="flex items-center gap-2">
+                            <label className="text-sm">Limit</label>
+                            <input type="number" min={1} max={90000} value={limit} onChange={e => setLimit(Number(e.target.value || 0))} className="p-2 border rounded w-28" />
+                        </div>
                         <button type="button" onClick={addFilter} className="px-3 py-2 bg-blue-600 text-white rounded">Add Filter</button>
                         <button type="submit" className="px-3 py-2 bg-green-600 text-white rounded">Run Search</button>
                         <button type="button" onClick={runSearch} className="px-3 py-2 bg-gray-200 rounded">Refresh</button>

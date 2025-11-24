@@ -153,7 +153,19 @@ class CloudClient:
                     "node_region": region_name,
                     "node_id": region_id.replace('us-east4','us-east4c')
                     })
+        self.manuallyAddEastNodes()
         print(self.cluster_details)
+
+    def manuallyAddEastNodes(self):
+            id="0b7cee76-dc84-441d-9417-b7274fb36cdc"
+            primary_region = "us-east4"
+            regions = ["us-east4a","us-east4b","us-east4c"]
+            for i in range(3):
+                region_id = f"{id}.gcp.aws-us-east-1.cockroachlabs.cloud:26257"
+                self.cluster_details[id]["nodes"].append({
+                    "node_region": primary_region,
+                    "node_id": region_id.replace('us-east4',regions[i])
+                    })
 
     def getClusterDetails(self):
         return self.cluster_details

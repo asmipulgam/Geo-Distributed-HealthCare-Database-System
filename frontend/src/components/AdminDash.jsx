@@ -93,32 +93,7 @@ export default function AdminDash() {
                     ))}
                 </div>
 
-                    {/* Recent Query Metrics (latest) */}
-                    <div className="mt-6 px-4">
-                        <div className="bg-white shadow-sm rounded-xl p-4 border border-gray-100">
-                            <h3 className="text-md font-medium text-gray-700 mb-2">Recent Query Metrics</h3>
-                            {(!recentMetrics || recentMetrics.length === 0) ? (
-                                <div className="text-sm text-gray-500">No metrics collected yet.</div>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                    {recentMetrics.slice(0,3).map((m, idx) => (
-                                        <div key={idx} className="p-3 bg-gray-50 rounded-lg">
-                                            <div className="text-sm text-gray-600">{new Date(m.timestamp).toLocaleString()}</div>
-                                            <div className="text-sm text-gray-600">Region: {m.region}</div>
-                                            <div className="text-lg font-semibold text-gray-900 mt-2">{m.metrics.rows} rows</div>
-                                            <div className="text-sm text-gray-700">Query time: {m.metrics.select_time_ms} ms</div>
-                                            {m.metrics.explain_time_ms != null && (
-                                                <div className="text-sm text-gray-500">Explain: {m.metrics.explain_time_ms} ms</div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
 
-
-                {/* Node List (collapsible clusters) */}
                 <div className="bg-white shadow-md rounded-2xl border border-gray-100 mx-4 mb-10">
                     <div className="border-b px-6 py-4">
                         <h2 className="text-xl font-semibold text-gray-800">Node Details</h2>

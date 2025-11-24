@@ -360,12 +360,15 @@ class DBClient:
         print("3")
 
         conn = self.connections.get(region)
+        created_conn = False
         if conn is None:
             # Fall back to default mapping via getURL
             dsn = self.getURL({'region': region})
-            conn = psycopg2.connect(dsn)
-            print("4")
-
+            if not dsn:
+                conn = None
+            else:
+                conn = psycopg2.connect(dsn)
+                created_conn = True
         try:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute(sql, params)
@@ -373,7 +376,48 @@ class DBClient:
                 # return plain list of dicts
                 return [dict(r) for r in rows]
         except Exception as e:
-            raise
+            # Attempt fault-tolerant fallback to us-east if primary region failed
+            try:
+                print(f"Primary DB request for region '{region}' failed: {e}. Attempting fallback to 'us-east'.")
+                # close ephemeral primary connection if we created it
+                try:
+                    if created_conn and conn is not None:
+                        conn.close()
+                except Exception:
+                    pass
+
+                # Try to obtain a connection to us-east (allow backup resolution)
+                try:
+                    fb_conn, fb_region, fb_created = self.get_connection_for_region('us-east', allow_backup=True)
+                except Exception:
+                    fb_conn = None
+                    fb_created = False
+
+                if not fb_conn:
+                    # nothing we can do; re-raise original error
+                    raise
+
+                try:
+                    with fb_conn.cursor(cursor_factory=RealDictCursor) as cur2:
+                        cur2.execute(sql, params)
+                        rows = cur2.fetchall()
+                        return [dict(r) for r in rows]
+                finally:
+                    try:
+                        if fb_created and fb_conn is not None:
+                            fb_conn.close()
+                    except Exception:
+                        pass
+            except Exception:
+                # Re-raise the original exception to preserve stack/context
+                raise
+        finally:
+            # close any ephemeral primary connection we created for this query
+            try:
+                if created_conn and conn is not None:
+                    conn.close()
+            except Exception:
+                pass
 
         
     def replicate_outbox_events(self):
@@ -706,11 +750,15 @@ class DBClient:
         else:
             sql = f'INSERT INTO {table_name} ({cols_sql}) VALUES ({placeholders});'
 
+        
+
         created_conn = False
         if conn is None:
             conn, used_region, created_conn = self.get_connection_for_region(first_region, allow_backup=True)
         if conn is None:
             raise RuntimeError("No available DB connection for bulk insert")
+        
+        print("Bulk insert SQL:", sql,"Into conn: ",conn)
 
         with conn.cursor() as cur:
             execute_batch(cur, sql, tuples, page_size=batch_size)
@@ -733,6 +781,7 @@ class DBClient:
                 conn.close()
         except Exception:
             pass
+        print("Bulk insert complete")
 
     def bulk_insert_doctors(self, conn, rows, batch_size=1000, upsert=True, region="us-west"):
         """
@@ -810,7 +859,7 @@ class DBClient:
 
 
     def loadLocalData(self,conn):
-        paths="./data/Patients_US-WEST.csv"
+        paths="./data/Patients_US-CENTRAL.csv"
         if isinstance(paths, (str, Path)):
             paths = [paths]
 
@@ -820,5 +869,5 @@ class DBClient:
                 reader = csv.DictReader(f)
                 for r in reader:
                     rows.append({k.strip(): (v.strip() if isinstance(v, str) else v) for k, v in r.items()})
-        print(rows)
+        #print(rows)
         self.bulk_insert_patients(conn, rows, batch_size=1000, upsert=True)

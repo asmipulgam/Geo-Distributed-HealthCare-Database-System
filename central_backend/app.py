@@ -12,11 +12,16 @@ import time
 import uuid
 import signal
 import atexit
+import threading
+import os
+import multiprocessing
+import warnings
 
 import psycopg2
 
 from datetime import datetime
 from decimal import Decimal
+import math
 
 # URL of the node backend to forward paginated queries to
 NODE_BACKEND_URL = os.environ.get("NODE_BACKEND_URL", "http://localhost:5001")
@@ -243,13 +248,46 @@ def api_search():
     """
     try:
         body = request.get_json(silent=True) or {}
-        region = body.get('region', 'us-west')
+        # Accept either a single `region` or multiple `regions` (list)
+        region = body.get('region')
+        regions = body.get('regions') or ([] if region is None else [region])
         filters = body.get('filters') or []
         limit = int(body.get('limit', 10))
 
         t0 = time.time()
-        rows = db.search_patients(filters=filters, region=region, limit=limit)
+        rows = []
+        # Determine per-region fetch size. We distribute the requested `limit` across selected
+        # regions to avoid over-fetching. Each physical DB has a hard cap of 90000 records.
+        req_limit = int(limit)
+        num_regions = max(1, len(regions))
+        per_region_limit = max(1, math.ceil(req_limit / num_regions))
+        # Cap per-region fetch size to physical DB limit
+        per_region_limit = min(90000, per_region_limit)
+
+        # Query each requested region and aggregate results. We will truncate the combined
+        # results to the requested overall `limit` before returning.
+        for r in regions:
+            try:
+                part = db.search_patients(filters=filters, region=r, limit=per_region_limit)
+                # ensure we tag origin region so the UI can show provenance
+                if isinstance(part, (list, tuple)):
+                    for pr in part:
+                        if isinstance(pr, dict):
+                            # If the row already has Region/region, leave it; otherwise set `__source_region`
+                            if not (pr.get('Region') or pr.get('region')):
+                                pr['__source_region'] = r
+                            rows.append(pr)
+                        else:
+                            rows.append(pr)
+            except Exception as e:
+                # ignore region errors but continue with others
+                print(f"Warning: search failed for region {r}: {e}")
+
         elapsed_ms = int((time.time() - t0) * 1000)
+
+        # Truncate combined results to requested overall limit for stable UI
+        if isinstance(rows, list) and len(rows) > req_limit:
+            rows = rows[:req_limit]
 
         # record a lightweight metric entry
         try:
@@ -438,13 +476,71 @@ def shutdown_replicators(signum=None, frame=None):
     Registered as a signal handler for SIGINT/SIGTERM and with `atexit`.
     Accepts optional (signum, frame) so it can be used as a handler.
     """
+    # Prevent re-entrancy
+    if getattr(shutdown_replicators, 'in_progress', False):
+        print("Shutdown already in progress; ignoring additional signal")
+        return
+    shutdown_replicators.in_progress = True
+
     print(f"Shutting down replicators (signal={signum})...")
+
+    # Start a watchdog that will forcibly kill the process after a timeout
+    def _force_kill_after(timeout_sec=30):
+        try:
+            time.sleep(timeout_sec)
+            print(f"Shutdown timeout ({timeout_sec}s) reached, forcing exit...")
+        except Exception:
+            pass
+        # Attempt to terminate any active child processes first
+        try:
+            for p in multiprocessing.active_children():
+                try:
+                    p.terminate()
+                    p.join(1)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Suppress noisy resource_tracker warning if leftover semaphores exist
+        try:
+            warnings.filterwarnings("ignore", message=r"resource_tracker: There appear to be .* leaked semaphore objects to clean up at shutdown")
+        except Exception:
+            pass
+
+        # Use os._exit to avoid any stuck cleanup hooks; this is last-resort
+        os._exit(1)
+
+    watcher = threading.Thread(target=_force_kill_after, args=(30,), daemon=True)
+    watcher.start()
+
+    # Attempt graceful stop of known replicators
     for rep in list(REPLICATORS):
         try:
-            rep.stop(timeout=1)
+            # If the Replicator exposes a stop(timeout) API, use it; otherwise call stop()
+            try:
+                rep.stop(timeout=5)
+            except TypeError:
+                # fallback if stop() doesn't accept timeout
+                rep.stop()
         except Exception as e:
             print("Error stopping replicator:", e)
+
+    # Allow a short grace period for threads to finish
+    try:
+        time.sleep(1)
+    except Exception:
+        pass
+
     REPLICATORS.clear()
+
+    print("Shutdown actions complete — exiting process.")
+    # Exit immediately; watcher will force-exit if this fails
+    try:
+        os._exit(0)
+    except Exception:
+        # If os._exit fails for any reason, raise SystemExit as fallback
+        raise SystemExit(0)
 
 if __name__ == "__main__":
     # Run the Flask development server
@@ -456,14 +552,18 @@ if __name__ == "__main__":
     except Exception:
         pass
     try:
-        atexit.register(shutdown_replicators)
+        if REPLICATORS == [] or REPLICATORS is None:
+            pass
+        print("Exiting")
+        #atexit.register(shutdown_replicators)
     except Exception:
         pass
 
-    #initReplicators()
+    initReplicators()
     print("Client initialized")
+    #These are for direct loading of data at initial point
     #db.loadDoctorData(db.connections["us-west"])
-    #db.loadLocalData(db.connections["us-west"])
+    #db.loadLocalData(db.connections["us-east"])
     app.run(host="0.0.0.0", port=5010, debug=True)
     
     
