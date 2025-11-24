@@ -20,7 +20,6 @@ export default function Agent() {
             if (!res.ok) throw new Error(`backend error ${res.status}`);
             const pRes = await res.json();
 
-            // expected pRes: { records: [...], nextIndex: number|null, prevIndex: number|null }
             setRecords(pRes.records || []);
             setNextCursor(pRes.nextIndex ?? null);
             setPrevCursor(pRes.prevIndex ?? null);

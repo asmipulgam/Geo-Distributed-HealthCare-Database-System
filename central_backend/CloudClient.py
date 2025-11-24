@@ -20,7 +20,7 @@ class CloudClient:
       details = client.get_cluster('cluster-id')
     """
 
-    def __init__(self, base_url: str, api_key: Optional[str] = None, timeout: int = 10, session: Optional[requests.Session] = None):
+    def __init__(self, base_url: str = "https://cockroachlabs.cloud/api/v1", api_key: Optional[str] = None, timeout: int = 10, session: Optional[requests.Session] = None):
         self.base_url = base_url.rstrip('/')
         self.api_key = api_key
         self.timeout = timeout
@@ -104,9 +104,9 @@ class CloudClient:
         for i in data['clusters']:
             id = i.get('id')
             self.cluster_details[id]={}
-            if i.get("name")=='cotton-prawn':
+            if i.get("name")=='uscentral':
                 self.cluster_details[id]["primary_region"] = "central" 
-            elif i.get("name")=='sixear-gundi':
+            elif i.get("name")=='uswest':
                 self.cluster_details[id]["primary_region"] = "west"
             else:
                 self.cluster_details[id]["primary_region"] = "east"
@@ -143,18 +143,17 @@ class CloudClient:
                 else:
                     self.cluster_details[id]["nodes"].append({
                     "node_region": region_name,
-                    "node_id": region_id.replace('us-east4','us-east4a')
+                    "node_id": region_id.replace('us-east1','us-east1a')
                     })
                     self.cluster_details[id]["nodes"].append({
                     "node_region": region_name,
-                    "node_id": region_id.replace('us-east4','us-east4b')
+                    "node_id": region_id.replace('us-east1','us-east1b')
                     })
                     self.cluster_details[id]["nodes"].append({
                     "node_region": region_name,
-                    "node_id": region_id.replace('us-east4','us-east4c')
+                    "node_id": region_id.replace('us-east1','us-east1c')
                     })
-        self.manuallyAddEastNodes()
-        print(self.cluster_details)
+        #self.manuallyAddEastNodes()
 
     def manuallyAddEastNodes(self):
             id="0b7cee76-dc84-441d-9417-b7274fb36cdc"

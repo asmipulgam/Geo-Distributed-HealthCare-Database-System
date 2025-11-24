@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import "tailwindcss/index.css"
 import { BACKEND_URL } from "./constants";
 
+
+//Store Abbreviations in Database because its a good identifier and standard form
 const US_STATES = {
     'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas', 'CA': 'California', 'CO': 'Colorado',
     'CT': 'Connecticut', 'DE': 'Delaware', 'FL': 'Florida', 'GA': 'Georgia', 'HI': 'Hawaii', 'ID': 'Idaho',
@@ -70,7 +72,7 @@ export default function AdminAdd() {
         }
     };
 
-    // Dummy region update function; user will replace with real logic
+    // Update Region based on State selection
     const updateRegionForState = (stateAbbrev) => {
         const west = new Set(['AK','AZ','CA','CO','HI','ID','MT','NV','NM','OR','UT','WA','WY'])
         const central = new Set(['AR','IA','IL','IN','KS','KY','LA','MI','MN','MO','MS','NE','ND','OH','OK','SD','TN','TX','WI'])

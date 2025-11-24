@@ -13,6 +13,11 @@ const ZONES = [
   { name: 'us-central1-b', coords: [-95.9345, 41.2565] },
   { name: 'us-central1-c', coords: [-95.92, 41.26] },
   { name: 'us-central1-f', coords: [-95.95, 41.25] },
+
+  // us-east1 (South Carolina / Charleston area) approximate locations for a/b/c
+  { name: 'us-east1-a', coords: [-79.93, 32.78] },
+  { name: 'us-east1-b', coords: [-79.92, 32.79] },
+  { name: 'us-east1-c', coords: [-79.94, 32.77] },
 ]
 
 export default function USChoroplethMap({ width = 900, height = 550 }){

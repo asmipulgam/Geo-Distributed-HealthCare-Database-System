@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
 import { BACKEND_URL } from './constants';
 import USChoroplethMap from './USChoroplethMap';
+import {motion} from "framer-motion";
 
+
+//A Dhasboard screen similar to CockroachDB Admin Cluster Dashboard. We are using the API key to CockroachDB clusters to fetch the Cluster's and Node's informatipn and display it here.
 export default function AdminDash() {
     const [stats, setStats] = useState({ total: 6, active: 6, dead: 0 });
     const [nodes, setNodes] = useState([]);
@@ -16,46 +18,38 @@ export default function AdminDash() {
     useEffect(() => {
         async function fetchData() {
             try {
-                //const res = await fetch('/api/nodes'); // Example API endpoint
-                //const data = await res.json();
-                // Assuming API returns { summary: { total, active, dead }, nodes: [{id, region, status, logsUrl}] }
-                //setStats(data.summary);
-                //setNodes(data.nodes);
-                setNodes({'1d782d03-e0b2-4caa-9383-384877b74427': {'primary_region': 'central', 'nodes': [{'node_region': 'us-central1', 'node_id': 'cotton-prawn-10234.jxf.gcp-us-central1.cockroachlabs.cloud'}, {'node_region': 'us-east1', 'node_id': 'cotton-prawn-10234.jxf.gcp-us-east1.cockroachlabs.cloud'}, {'node_region': 'us-west2', 'node_id': 'cotton-prawn-10234.jxf.gcp-us-west2.cockroachlabs.cloud'}]}, '588e784c-737a-46ea-a410-05ffbba8bd85': {'primary_region': 'west', 'nodes': [{'node_region': 'us-central1', 'node_id': 'sixear-gundi-10233.jxf.gcp-us-central1.cockroachlabs.cloud'}, {'node_region': 'us-east1', 'node_id': 'sixear-gundi-10233.jxf.gcp-us-east1.cockroachlabs.cloud'}, {'node_region': 'us-west2', 'node_id': 'sixear-gundi-10233.jxf.gcp-us-west2.cockroachlabs.cloud'}]}})
+                const res = await fetch(`${BACKEND_URL}/api/nodes`); // Example API endpoint
+                const data = await res.json();
+                console.log("Fetched cluster/node data:", data);
+                setStats({
+                    total: Object.keys(data).length * 3, 
+                    active: Object.values(data).filter(cluster => Array.isArray(cluster.nodes)).length * 3,
+                    dead: Object.values(data).filter(cluster => Array.isArray(cluster.nodes) && cluster.nodes.every(node => node.status === 'dead')).length,
+                });
+                setNodes(data);
+                //setNodes({'1d782d03-e0b2-4caa-9383-384877b74427': {'primary_region': 'central', 'nodes': [{'node_region': 'us-central1', 'node_id': 'cotton-prawn-10234.jxf.gcp-us-central1.cockroachlabs.cloud'}, {'node_region': 'us-east1', 'node_id': 'cotton-prawn-10234.jxf.gcp-us-east1.cockroachlabs.cloud'}, {'node_region': 'us-west2', 'node_id': 'cotton-prawn-10234.jxf.gcp-us-west2.cockroachlabs.cloud'}]}, '588e784c-737a-46ea-a410-05ffbba8bd85': {'primary_region': 'west', 'nodes': [{'node_region': 'us-central1', 'node_id': 'sixear-gundi-10233.jxf.gcp-us-central1.cockroachlabs.cloud'}, {'node_region': 'us-east1', 'node_id': 'sixear-gundi-10233.jxf.gcp-us-east1.cockroachlabs.cloud'}, {'node_region': 'us-west2', 'node_id': 'sixear-gundi-10233.jxf.gcp-us-west2.cockroachlabs.cloud'}]}})
             } catch (err) {
                 console.error('Error fetching data:', err);
             }
         }
         fetchData();
-        // also fetch recent metrics for admin display
-        async function fetchMetrics() {
-            try {
-                const res = await fetch(`${BACKEND_URL}/api/metrics`);
-                if (!res.ok) throw new Error(`metrics fetch failed: ${res.status}`);
-                const data = await res.json();
-                setRecentMetrics(data.metrics || []);
-            } catch (err) {
-                console.error('Error fetching metrics:', err);
-            }
-        }
-        fetchMetrics();
     }, []);
 
-    // Dummy backup handler for now
-    const handleBackup = () => {
-        console.log('Backup triggered (dummy)')
+    //CockroachDB Free cluster automatically backups data. So what we are doing for Project purpose is displaying a List of Buckets from Google Cloud Storage directly here. 
+    // const handleBackup = () => {
+      
         
-        try {
-            fetch(`${BACKEND_URL}/api/backup`).then(res => {
-                if (!res.ok) throw new Error(`Backup failed: ${res.status}`);
-                console.log('Backup successful');
-            }).catch(err => {
-                console.error('Backup error:', err);
-            });
-        } catch (err) {
-            console.error('Backup error:', err);
-        }
-    }
+    //     try {
+    //         fetch(`${BACKEND_URL}/api/backup`).then(res => {
+    //             if (!res.ok) throw new Error(`Backup failed: ${res.status}`);
+    //             console.log('Backup successful');
+    //         }).catch(err => {
+    //             console.error('Backup error:', err);
+    //         });
+    //     } catch (err) {
+    //         console.error('Backup error:', err);
+    //     }
+    // }
 
     return (
         <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center">
@@ -63,12 +57,12 @@ export default function AdminDash() {
                 <div className="flex items-center justify-between mb-6">
                     <h1 className="text-3xl font-bold text-gray-800">Cluster Dashboard</h1>
                     <div>
-                        <button
+                        {/* <button
                             onClick={handleBackup}
                             className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700 transition"
                         >
                             Backup
-                        </button>
+                        </button> */}
                     </div>
                 </div>
 
@@ -100,7 +94,7 @@ export default function AdminDash() {
                     </div>
                     <div className="p-6">
                         {(!nodes || Object.keys(nodes).length === 0) ? (
-                            <div className="text-center py-6 text-gray-500">Loading or no data available...</div>
+                            <div className="text-center py-6 text-gray-500">Loading...</div>
                         ) : (
                             <div className="space-y-4">
                                 {Object.entries(nodes).map(([clusterId, cluster]) => (
@@ -121,7 +115,6 @@ export default function AdminDash() {
 
                                         {expanded[clusterId] && (
                                             <div className="px-6 py-4 bg-white">
-                                                {/* Cluster-level key/value pairs (excluding nodes array) */}
                                                 <div className="mb-3">
                                                     {Object.entries(cluster).filter(([k]) => k !== 'nodes').map(([k, v]) => (
                                                         <div key={k} className="flex items-start gap-4 text-sm text-gray-700">
@@ -131,7 +124,6 @@ export default function AdminDash() {
                                                     ))}
                                                 </div>
 
-                                                {/* Nodes array: iterate and display indented */}
                                                 {Array.isArray(cluster.nodes) && (
                                                     <div className="space-y-2">
                                                         {cluster.nodes.map((n, idx) => (

@@ -18,6 +18,7 @@ import multiprocessing
 import warnings
 
 import psycopg2
+from CloudClient import CloudClient
 
 from datetime import datetime
 from decimal import Decimal
@@ -167,6 +168,16 @@ def admin_reload_connections():
         return jsonify({"status": "ok", "connections": statuses}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+    
+
+@app.get("/api/nodes")
+def api_nodes():
+    """Fetch cluster and node status from NODE_BACKEND_URL and return to caller."""
+    try:
+        return jsonify(clusterDetails), 200
+    except Exception as e:
+        print("Error fetching nodes from backend:", e)
+        return jsonify({"error": str(e)}), 500
 
 
 
@@ -542,8 +553,22 @@ def shutdown_replicators(signum=None, frame=None):
         # If os._exit fails for any reason, raise SystemExit as fallback
         raise SystemExit(0)
 
+clusterDetails = None
+
+def fetchClusterDetails():
+    config = configparser.ConfigParser()
+    config.read('database.conf')
+    cc1 = CloudClient(api_key=config.get('DEFAULT','API_KEY_EC'))
+    cc2 = CloudClient(api_key=config.get('DEFAULT','API_KEY_W'))
+    cc1.run_details()
+    cc2.run_details()
+    global clusterDetails
+    clusterDetails = cc1.getClusterDetails()
+    clusterDetails.update(cc2.getClusterDetails())
+    
+
 if __name__ == "__main__":
-    # Run the Flask development server
+    #Run the Flask development server
     db = DBClient()
     # Register signal handlers and atexit to ensure replicators are stopped
     try:
@@ -559,11 +584,13 @@ if __name__ == "__main__":
     except Exception:
         pass
 
-    initReplicators()
+    #initReplicators()
     print("Client initialized")
     #These are for direct loading of data at initial point
     #db.loadDoctorData(db.connections["us-west"])
     #db.loadLocalData(db.connections["us-east"])
+    fetchClusterDetails()
     app.run(host="0.0.0.0", port=5010, debug=True)
+    
     
     
