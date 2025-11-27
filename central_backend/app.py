@@ -1,15 +1,10 @@
 import configparser
 import os
-import requests
 from flask import Flask, request, jsonify
 from Replicator import Replicator
 from client import DBClient
 from fetchall import FetchAll
-import csv
-from pathlib import Path
-import re
 import time
-import uuid
 import signal
 import atexit
 import threading
@@ -17,27 +12,21 @@ import os
 import multiprocessing
 import warnings
 
-import psycopg2
 from CloudClient import CloudClient
 
 from datetime import datetime
-from decimal import Decimal
 import math
 
-# URL of the node backend to forward paginated queries to
-NODE_BACKEND_URL = os.environ.get("NODE_BACKEND_URL", "http://localhost:5001")
 
 app = Flask(__name__)
 
-# In-memory ring of recent query metrics (kept small for demo purposes)
 RECENT_METRICS = []
 
-# Keep references to running Replicator instances so we can stop them on shutdown
+# Keeping references to running Replicator instances so we can stop them on shutdown
 REPLICATORS = []
 
 
-# Simple CORS handling so frontend (vite) can call this API during development.
-# For production, use flask-cors or restrict origins appropriately.
+# Avoid CORS Issues
 @app.before_request
 def _handle_options():
     # Respond to preflight OPTIONS requests
@@ -62,21 +51,20 @@ def _add_cors_headers(response):
 
 
 
-
+#Default Flask Endpoint
 @app.get("/ping")
 def ping():
     return jsonify({"status": "ok", "message": "pong"}), 200
 
-
+#Default Flask Endpoint
 @app.get("/greet")
 def greet():
     name = request.args.get("name", "world")
     return jsonify({"greeting": f"Hello, {name}!"}), 200
 
-
+#Default Flask Endpoint
 @app.post("/echo")
 def echo():
-    # Echo back JSON body or form fields
     if request.is_json:
         data = request.get_json(silent=True) or {}
     else:
@@ -109,7 +97,11 @@ def getCustomer():
                     "endpoint": "getcustomer",
                     "region": state,
                     "customer_id": customer_id,
+                    # keep raw metrics for debugging
                     "metrics": m,
+                    # normalize common fields for UI
+                    "rows": int(m.get('rows')) if isinstance(m.get('rows'), (int, float)) else (m.get('rows') or None),
+                    "elapsed_ms": int(m.get('select_time_ms')) if m.get('select_time_ms') is not None else (m.get('elapsed_ms') if m.get('elapsed_ms') is not None else None),
                 }
                 RECENT_METRICS.insert(0, entry)
                 if len(RECENT_METRICS) > 50:
@@ -140,6 +132,9 @@ def addData():
                     "endpoint": "insert_patient",
                     "payload_region": data.get("Region") or data.get("State") or data.get("region"),
                     "metrics": m,
+                    # normalize fields
+                    "rows": int(m.get('rows')) if isinstance(m.get('rows'), (int, float)) else (m.get('rows') or None),
+                    "elapsed_ms": int(m.get('select_time_ms')) if m.get('select_time_ms') is not None else (m.get('elapsed_ms') if m.get('elapsed_ms') is not None else None),
                 }
                 RECENT_METRICS.insert(0, entry)
                 if len(RECENT_METRICS) > 50:
@@ -224,7 +219,11 @@ def api_all():
                     "region": region,
                     "cursor": cursor,
                     "page_size": page_size,
+                    # keep legacy `metrics` object for debugging
                     "metrics": m,
+                    # normalize common fields so UI can render consistently
+                    "rows": int(m.get('rows')) if isinstance(m.get('rows'), (int, float)) else (m.get('rows') or 0),
+                    "elapsed_ms": int(m.get('select_time_ms')) if m.get('select_time_ms') is not None else None,
                 }
                 RECENT_METRICS.insert(0, entry)
                 # keep recent history bounded
@@ -277,9 +276,20 @@ def api_search():
 
         # Query each requested region and aggregate results. We will truncate the combined
         # results to the requested overall `limit` before returning.
+        per_region_timings = []
         for r in regions:
             try:
+                t_region = time.time()
                 part = db.search_patients(filters=filters, region=r, limit=per_region_limit)
+                region_elapsed_ms = int((time.time() - t_region) * 1000)
+                # count rows returned for this region
+                part_count = len(part) if isinstance(part, (list, tuple)) else (1 if part is not None else 0)
+                per_region_timings.append({
+                    'region': r,
+                    'elapsed_ms': region_elapsed_ms,
+                    'rows': part_count,
+                })
+
                 # ensure we tag origin region so the UI can show provenance
                 if isinstance(part, (list, tuple)):
                     for pr in part:
@@ -293,6 +303,12 @@ def api_search():
             except Exception as e:
                 # ignore region errors but continue with others
                 print(f"Warning: search failed for region {r}: {e}")
+                per_region_timings.append({
+                    'region': r,
+                    'elapsed_ms': None,
+                    'rows': 0,
+                    'error': str(e),
+                })
 
         elapsed_ms = int((time.time() - t0) * 1000)
 
@@ -300,7 +316,7 @@ def api_search():
         if isinstance(rows, list) and len(rows) > req_limit:
             rows = rows[:req_limit]
 
-        # record a lightweight metric entry
+        # record a lightweight metric entry including per-region timings
         try:
             entry = {
                 'timestamp': datetime.utcnow().isoformat() + 'Z',
@@ -309,6 +325,7 @@ def api_search():
                 'filters_count': len(filters),
                 'rows': len(rows) if isinstance(rows, (list, tuple)) else 0,
                 'elapsed_ms': elapsed_ms,
+                'per_region': per_region_timings,
             }
             RECENT_METRICS.insert(0, entry)
             if len(RECENT_METRICS) > 50:
@@ -316,7 +333,7 @@ def api_search():
         except Exception:
             pass
 
-        return jsonify({'records': rows}), 200
+        return jsonify({'records': rows, 'elapsed_ms': elapsed_ms, 'per_region': per_region_timings}), 200
     except Exception as e:
         print('Search error:', e)
         return jsonify({'error': str(e)}), 500
@@ -355,15 +372,17 @@ def api_organ_search():
         try:
             center_lat = hospital.get('lat')
             center_lon = hospital.get('lng') or hospital.get('lon')
+            t0 = time.time()
             if center_lat is not None and center_lon is not None:
                 rows = db.search_patients(filters=filters, region=region, limit=5, center_lat=center_lat, center_lon=center_lon, donor_only=donor_only)
             else:
                 rows = db.search_patients(filters=filters, region=region, limit=5, donor_only=donor_only)
+            elapsed_ms = int((time.time() - t0) * 1000)
         except Exception as e:
             print('organ_search db error:', e)
             return jsonify({'error': str(e)}), 500
 
-        # record metric
+        # record metric (include elapsed_ms and rows)
         try:
             entry = {
                 'timestamp': datetime.utcnow().isoformat() + 'Z',
@@ -371,6 +390,7 @@ def api_organ_search():
                 'hospital_id': hospital.get('id'),
                 'region': region,
                 'rows': len(rows) if isinstance(rows, (list, tuple)) else 0,
+                'elapsed_ms': int(elapsed_ms) if elapsed_ms is not None else None,
             }
             RECENT_METRICS.insert(0, entry)
             if len(RECENT_METRICS) > 50:
@@ -378,7 +398,7 @@ def api_organ_search():
         except Exception:
             pass
 
-        return jsonify({'records': rows}), 200
+        return jsonify({'records': rows, 'elapsed_ms': elapsed_ms}), 200
     except Exception as e:
         print('organ_search error:', e)
         return jsonify({'error': str(e)}), 500
@@ -580,7 +600,7 @@ if __name__ == "__main__":
         if REPLICATORS == [] or REPLICATORS is None:
             pass
         print("Exiting")
-        #atexit.register(shutdown_replicators)
+        atexit.register(shutdown_replicators)
     except Exception:
         pass
 

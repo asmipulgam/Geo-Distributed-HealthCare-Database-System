@@ -5,6 +5,7 @@ import { BrowserRouter as Router, Routes, Route, Link, Navigate } from "react-ro
 import ErrorPage from "./components/ErrorPage.jsx";
 import CustomerData from "./components/CustomerData.jsx";
 import Agent from "./components/AgentScreen.jsx";
+import AgentRoute from "./components/AgentRoute.jsx";
 import AdminAdd from "./components/AdminAdd.jsx";
 import AdminDash from "./components/AdminDash.jsx";
 import AdminSearch from "./components/AdminSearch.jsx";
@@ -25,7 +26,7 @@ function App() {
                    {/* Actual routes */}
                    <Route path="/login" element={<Login />} />
                    <Route path="/customerdetails" element={<CustomerData />} />
-                   <Route path="/agent/:region" element={isAuthenticated() ? <Agent /> : <LoginScreen />} />
+                   <Route path="/agent/:region" element={isAuthenticated() ? <AgentRoute /> : <LoginScreen />} />
                    <Route path="/adminadd" element={isAuthenticated() ? <AdminAdd /> : <LoginScreen />} />
                    <Route path="/admin" element={isAuthenticated() ? <AdminDash /> : <LoginScreen />} />
                    <Route path="/admin/search" element={isAuthenticated() ? <AdminSearch /> : <LoginScreen />} />

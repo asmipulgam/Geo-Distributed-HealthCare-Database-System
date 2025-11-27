@@ -15,7 +15,6 @@ function buildWhereClause(filters) {
         .map(f => {
             const col = `"${f.col}"`;
             if (f.op === 'IN') {
-                // assume comma-separated values
                 const vals = f.val.split(',').map(v => v.trim()).filter(Boolean);
                 const quoted = vals.map(v => `'${v.replace(/'/g, "''")}'`).join(', ');
                 return `${col} IN (${quoted})`;
@@ -23,7 +22,6 @@ function buildWhereClause(filters) {
             if (f.op === 'LIKE') {
                 return `${col} LIKE '%${f.val.replace(/'/g, "''")}%'`;
             }
-            // numeric-looking values should not be quoted — naive heuristic
             const isNum = /^-?\d+(\.\d+)?$/.test(f.val);
             return isNum ? `${col} ${f.op} ${f.val}` : `${col} ${f.op} '${f.val.replace(/'/g, "''")}'`;
         });
@@ -32,19 +30,17 @@ function buildWhereClause(filters) {
 
 export default function AdminSearch() {
     const [filters, setFilters] = useState([{ col: 'Patient_ID', op: '=', val: '' }]);
-    // allow selecting multiple regions for distributed search
+
     const [regions, setRegions] = useState(['us-west']);
     const [limit, setLimit] = useState(10);
     const [results, setResults] = useState([]);
     const [sqlPreview, setSqlPreview] = useState('');
     const [loading, setLoading] = useState(false);
-    const navigate = useNavigate();
     const [columnMap, setColumnMap] = useState({});
-    
-    // Log results when they change (avoids inline console.log in JSX)
+    const [searchMs, setSearchMs] = useState(null);
+
     useEffect(() => {
-        if (results && results.length) console.debug('AdminSearch results:', results.slice(0,3));
-        // build a columnMap from the first result for faster/more predictable lookups
+        if (results && results.length) console.log('AdminSearch results:', results.slice(0,3));
         if (results && results.length > 0) {
             const first = results[0];
             const m = {};
@@ -58,12 +54,10 @@ export default function AdminSearch() {
         }
     }, [results]);
 
-    // Helper: robustly extract a column value from a row object even when
-    // the backend uses different key casing/format (e.g., patient_id, Patient_ID, patientId)
     function getValueFromRow(row, col) {
         if (!row) return '';
 
-        // If row is an array-like or wrapped, try to unwrap to the first object
+
         function unwrap(r) {
             if (!r) return r;
             if (Array.isArray(r) && r.length > 0 && typeof r[0] === 'object') return r[0];
@@ -76,21 +70,19 @@ export default function AdminSearch() {
         const src = unwrap(row);
         if (!src) return '';
 
-        // direct hit
         if (Object.prototype.hasOwnProperty.call(src, col)) return src[col];
 
         const normalizedCol = String(col).replace(/[^a-z0-9]/gi, '').toLowerCase();
 
-        // try obvious variants
         const variants = [
             col,
             col.toLowerCase(),
             col.toUpperCase(),
             col.replace(/_/g, ' ').toLowerCase(),
             col.replace(/ /g, '_').toLowerCase(),
-            // snake-case from CamelCase
+
             col.replace(/([A-Z])/g, '_$1').toLowerCase(),
-            // camelCase
+
             col.toLowerCase().replace(/_([a-z])/g, (_, g) => g.toUpperCase()),
         ];
 
@@ -107,7 +99,7 @@ export default function AdminSearch() {
         return '';
     }
 
-    // Return the key name in `row` that matches the display `col`, or null.
+
     function getMatchedKey(row, col) {
         if (!row) return null;
         function unwrap(r) {
@@ -155,12 +147,12 @@ export default function AdminSearch() {
         e && e.preventDefault();
         setLoading(true);
         try {
-            // Build SQL preview
+
             const where = buildWhereClause(filters);
             const sql = `SELECT * FROM patients ${where} LIMIT 10;`;
             setSqlPreview(sql);
 
-            // Try backend search endpoint first (if implemented)
+
             let data = null;
             try {
                 const res = await fetch(`${BACKEND_URL}/api/search`, {
@@ -170,26 +162,27 @@ export default function AdminSearch() {
                 });
                 if (res.ok) {
                     data = await res.json();
-                    // expected: { records: [...] }
+
                     console.log('Backend search data', data.records );
                     if (data && data.records) {
                         setResults(data.records);
+                        setSearchMs(data.elapsed_ms ?? null);
                         setLoading(false);
                         return;
                     }
                 }
             } catch (err) {
-                // ignore and fallback to client-side filtering
+
                 console.error('Backend search error', err);
             }
 
-            // Fallback: fetch a larger page from /api/all (use first selected region), then filter client-side
+
             const fallbackRegion = (regions && regions.length) ? regions[0] : 'us-west';
             const pageRes = await fetch(`${BACKEND_URL}/api/all?region=${fallbackRegion}&page_size=10`);
             const page = await pageRes.json();
             const rows = page.records || [];
 
-            // apply filters client-side
+
             const filtered = rows.filter(r => {
                 return filters.every(f => {
                     if (!f.col || f.val === undefined || f.val === '') return true;
@@ -212,6 +205,7 @@ export default function AdminSearch() {
             });
 
             setResults(filtered);
+            setSearchMs(null);
         } catch (err) {
             console.error('Search failed', err);
         } finally {
@@ -219,9 +213,6 @@ export default function AdminSearch() {
         }
     }
 
-    function openAnalytics() {
-        navigate('/analytics', { state: { rows: results } });
-    }
 
     return (
         <div className="min-h-screen p-6 bg-gray-50">
@@ -259,13 +250,13 @@ export default function AdminSearch() {
                         <button type="button" onClick={addFilter} className="px-3 py-2 bg-blue-600 text-white rounded">Add Filter</button>
                         <button type="submit" className="px-3 py-2 bg-green-600 text-white rounded">Run Search</button>
                         <button type="button" onClick={runSearch} className="px-3 py-2 bg-gray-200 rounded">Refresh</button>
-                        <button type="button" onClick={openAnalytics} className="ml-auto px-3 py-2 bg-indigo-600 text-white rounded" disabled={!results || results.length===0}>Open Analytics</button>
                     </div>
                 </form>
 
                 <div className="mb-6">
                     <h3 className="font-medium">SQL Preview</h3>
                     <pre className="bg-white p-3 rounded border text-sm">{sqlPreview || '—'}</pre>
+                    <div className="text-sm text-gray-600 mt-2">{searchMs !== null ? `Query time: ${searchMs} ms` : ''}</div>
                 </div>
 
                 <div>
@@ -282,8 +273,7 @@ export default function AdminSearch() {
                                         {results.map((r, idx) => (
                                             <tr key={idx} className="border-t">
                                                 {COLS.map(c => {
-                                                    
-                                                    // prefer the mapped key if available, otherwise fallback to fuzzy getter
+
                                                     const mapped = columnMap[c];
                                                     const val = mapped && Object.prototype.hasOwnProperty.call(r, mapped) ? r[mapped] : getValueFromRow(r, c);
                                                     return <td key={c} className="px-2 py-1 text-black">{val}</td>;

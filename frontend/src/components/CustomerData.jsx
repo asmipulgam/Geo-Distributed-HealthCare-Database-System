@@ -1,6 +1,6 @@
 import React from "react";
 import { useLocation, Link } from "react-router-dom";
-//import "tailwindcss/index.css"
+
 
 export default function CustomerData() {
     const location = useLocation();

@@ -11,6 +11,7 @@ export default function Agent() {
     const [loading,setLoading] = useState(false);
     const [count, setCount] = useState(0);
     const [offset, setOffset] = useState(0);
+    const [queryMs, setQueryMs] = useState(null);
     const fetchRecords = async (cursor = 0, dir = "next") => {
         setLoading(true);
         try {
@@ -25,6 +26,13 @@ export default function Agent() {
             setPrevCursor(pRes.prevIndex ?? null);
             setCount(pRes.count ?? 0);
             setOffset(pRes.offset ?? 0);
+            // capture query timing reported by backend (milliseconds)
+            try {
+                const qm = pRes.metrics && (pRes.metrics.select_time_ms ?? pRes.metrics.select_time_ms === 0 ? pRes.metrics.select_time_ms : null);
+                setQueryMs(qm !== undefined ? qm : null);
+            } catch (e) {
+                setQueryMs(null);
+            }
         } catch (e) {
             console.error("Issue fetching paginated data:", e);
         } finally {
@@ -32,7 +40,7 @@ export default function Agent() {
         }
     };
 
-    // Fetch once on mount and when region changes
+
     useEffect(() => {
         fetchRecords(0, "next");
     }, [region]);
@@ -47,6 +55,7 @@ export default function Agent() {
                     </div>
                     <div className="text-right">
                         <div className="text-sm text-gray-400">{loading ? "Loading…" : `Showing ${offset+1}-${Math.min(offset + records.length, count)} of ${count}`}</div>
+                        <div className="text-sm text-gray-500">{queryMs !== null ? `Query time: ${queryMs} ms` : ''}</div>
                     </div>
                 </header>
 

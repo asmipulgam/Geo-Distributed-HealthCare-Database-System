@@ -207,11 +207,7 @@ class Replicator:
                     src_created = True
                 except Exception:
                     return
-            if src_conn is not None:
-                if src_created:
-                    self._logger.info("Created new source connection for region %s", source_region)
-                else:
-                    self._logger.info("Reusing existing source connection for region %s", source_region)
+            
 
             src_cur = src_conn.cursor()
 
@@ -254,7 +250,6 @@ class Replicator:
                             existing = None
                         if existing:
                             target_conns[tgt] = (existing, False)
-                            self._logger.info("Reusing existing connection for target %s", tgt)
                         else:
                             try:
                                 tgt_dsn = self._db_client.getURL({'region': tgt})
@@ -262,7 +257,6 @@ class Replicator:
                                     continue
                                 created_conn = psycopg2.connect(tgt_dsn)
                                 target_conns[tgt] = (created_conn, True)
-                                self._logger.info("Created new connection for target %s", tgt)
                             except Exception:
                                 # couldn't connect to this target, skip it
                                 continue

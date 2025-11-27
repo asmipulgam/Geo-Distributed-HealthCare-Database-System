@@ -4,7 +4,7 @@ import USChoroplethMap from './USChoroplethMap';
 import {motion} from "framer-motion";
 
 
-//A Dhasboard screen similar to CockroachDB Admin Cluster Dashboard. We are using the API key to CockroachDB clusters to fetch the Cluster's and Node's informatipn and display it here.
+//A Dashboard screen similar to CockroachDB Admin Cluster Dashboard. We are using the API key to CockroachDB clusters to fetch the Cluster's and Node's informatipn and display it here.
 export default function AdminDash() {
     const [stats, setStats] = useState({ total: 6, active: 6, dead: 0 });
     const [nodes, setNodes] = useState([]);
@@ -27,6 +27,16 @@ export default function AdminDash() {
                     dead: Object.values(data).filter(cluster => Array.isArray(cluster.nodes) && cluster.nodes.every(node => node.status === 'dead')).length,
                 });
                 setNodes(data);
+                // also fetch recent metrics for admin UI
+                try {
+                    const mres = await fetch(`${BACKEND_URL}/api/metrics`);
+                    if (mres.ok) {
+                        const md = await mres.json();
+                        setRecentMetrics(md.metrics || []);
+                    }
+                } catch (err) {
+                    console.error('Error fetching recent metrics:', err);
+                }
                 //setNodes({'1d782d03-e0b2-4caa-9383-384877b74427': {'primary_region': 'central', 'nodes': [{'node_region': 'us-central1', 'node_id': 'cotton-prawn-10234.jxf.gcp-us-central1.cockroachlabs.cloud'}, {'node_region': 'us-east1', 'node_id': 'cotton-prawn-10234.jxf.gcp-us-east1.cockroachlabs.cloud'}, {'node_region': 'us-west2', 'node_id': 'cotton-prawn-10234.jxf.gcp-us-west2.cockroachlabs.cloud'}]}, '588e784c-737a-46ea-a410-05ffbba8bd85': {'primary_region': 'west', 'nodes': [{'node_region': 'us-central1', 'node_id': 'sixear-gundi-10233.jxf.gcp-us-central1.cockroachlabs.cloud'}, {'node_region': 'us-east1', 'node_id': 'sixear-gundi-10233.jxf.gcp-us-east1.cockroachlabs.cloud'}, {'node_region': 'us-west2', 'node_id': 'sixear-gundi-10233.jxf.gcp-us-west2.cockroachlabs.cloud'}]}})
             } catch (err) {
                 console.error('Error fetching data:', err);
@@ -146,9 +156,53 @@ export default function AdminDash() {
                         )}
                     </div>
 
-                    <div>
-                        <USChoroplethMap />
+                        <div>
+                            <USChoroplethMap />
+                        </div>
                     </div>
+
+                    <div className="bg-white shadow-md rounded-2xl border border-gray-100 mx-4 mb-10 p-6">
+                        <div className="border-b pb-3 mb-4">
+                            <h2 className="text-xl font-semibold text-gray-800">Recent Query Metrics</h2>
+                        </div>
+                        {(!recentMetrics || recentMetrics.length === 0) ? (
+                            <div className="text-gray-500">No recent metrics available.</div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full text-sm text-left">
+                                    <thead>
+                                        <tr className="text-xs text-gray-500">
+                                            <th className="px-2 py-1">Time</th>
+                                            <th className="px-2 py-1">Endpoint</th>
+                                            <th className="px-2 py-1">Region</th>
+                                            <th className="px-2 py-1">Rows</th>
+                                            <th className="px-2 py-1">Elapsed (ms)</th>
+                                            <th className="px-2 py-1">Per-Region</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {recentMetrics.slice(0, 25).map((m, idx) => (
+                                            <tr key={idx} className="border-t">
+                                                <td className="px-2 py-2 text-gray-700">{m.timestamp || ''}</td>
+                                                <td className="px-2 py-2 text-gray-700">{m.endpoint || ''}</td>
+                                                <td className="px-2 py-2 text-gray-700">{m.region || ''}</td>
+                                                <td className="px-2 py-2 text-gray-700">{(m.rows ?? (m.metrics && (m.metrics.rows ?? null))) ?? '-'}</td>
+                                                <td className="px-2 py-2 text-gray-700">{(m.elapsed_ms ?? (m.metrics && (m.metrics.select_time_ms ?? m.metrics.elapsed_ms ?? null))) ?? '-'}</td>
+                                                <td className="px-2 py-2 text-gray-700">
+                                                    {m.per_region ? (
+                                                        <div className="text-xs text-gray-600">
+                                                            {m.per_region.map((p, i) => (
+                                                                <div key={i}>{p.region}: {p.elapsed_ms ?? '-'}ms ({p.rows ?? 0})</div>
+                                                            ))}
+                                                        </div>
+                                                    ) : ('-')}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                 </div>
             </div>
         </div>

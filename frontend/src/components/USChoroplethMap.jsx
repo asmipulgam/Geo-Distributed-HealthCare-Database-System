@@ -30,7 +30,7 @@ export default function USChoroplethMap({ width = 900, height = 550 }){
 
     async function load() {
       try {
-        // Fetch TopoJSON of US states (public cdn)
+
         const res = await fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json')
         if (!res.ok) throw new Error('Failed to fetch map data')
         const topo = await res.json()
@@ -56,7 +56,7 @@ export default function USChoroplethMap({ width = 900, height = 550 }){
   const projection = geoAlbersUsa().translate([width / 2, height / 2]).scale(1100)
   const path = geoPath().projection(projection)
 
-  // Simple color function for a choropleth-like feel (light gradient by state id)
+
   const colorFor = (i) => `rgba(${50 + (i % 10) * 20}, ${120 + (i % 7) * 15}, 200, 0.7)`
 
   return (
@@ -75,7 +75,7 @@ export default function USChoroplethMap({ width = 900, height = 550 }){
           ))}
         </g>
 
-        {/* Outline for the whole US */}
+
         <path
           d={path({ type: 'FeatureCollection', features: states.features })}
           fill="none"
@@ -84,15 +84,13 @@ export default function USChoroplethMap({ width = 900, height = 550 }){
           opacity={0.6}
         />
 
-        {/* Highlight selected GCP zones with outlined circles and labels.
-            Use small offsets and label backgrounds to keep text readable when
-            markers overlap. */}
+
         <g className="zones">
           {ZONES.map((z, i) => {
             const [x, y] = projection(z.coords) || [null, null]
             if (x == null || y == null) return null
 
-            // Cycle through offsets to reduce overlap
+
             const offsets = [
               { dx: 14, dy: 6 },
               { dx: -14, dy: -14 },
@@ -105,7 +103,7 @@ export default function USChoroplethMap({ width = 900, height = 550 }){
 
             const label = z.name
             const fontSize = 12
-            // approximate text width: avg char width * length
+
             const textWidth = Math.max(60, label.length * (fontSize * 0.6))
             const rectPaddingX = 8
             const rectPaddingY = 4
@@ -120,10 +118,9 @@ export default function USChoroplethMap({ width = 900, height = 550 }){
                   <circle r={5} fill="#fff" stroke="#1f8ef1" strokeWidth={1} />
                 </g>
 
-                {/* leader line from marker to label */}
                 <line x1={x} y1={y} x2={rectX + 6} y2={rectY + rectPaddingY + (fontSize / 3)} stroke="#a0aec0" strokeWidth={1} strokeLinecap="round" />
 
-                {/* label background */}
+
                 <rect x={rectX} y={rectY} rx={6} ry={6} width={textWidth + rectPaddingX} height={fontSize + rectPaddingY * 2} fill="#ffffff" opacity={0.95} stroke="#e2e8f0" />
 
                 <text x={rectX + rectPaddingX / 2} y={rectY + fontSize + (rectPaddingY / 2) - 2} fontSize={fontSize} fontFamily="sans-serif" fill="#0b1220">

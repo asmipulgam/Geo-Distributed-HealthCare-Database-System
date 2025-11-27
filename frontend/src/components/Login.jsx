@@ -35,7 +35,7 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
     const navigate = useNavigate();
 
-  // Step 1: Health ID
+
   const [healthId, setHealthId] = useState('')
   const [healthIdTouched, setHealthIdTouched] = useState(false)
   const healthIdError = useMemo(() => {
@@ -120,10 +120,10 @@ export default function Login() {
 
     }
 
-  // Step 2: DOB
-  const [dobMode, setDobMode] = useState('calendar') // 'calendar' | 'manual'
-  const [dobCalendar, setDobCalendar] = useState('') // YYYY-MM-DD from <input type="date">
-  const [dobManual, setDobManual] = useState('') // YYYY-MM-DD as text
+
+  const [dobMode, setDobMode] = useState('calendar')
+  const [dobCalendar, setDobCalendar] = useState('') 
+  const [dobManual, setDobManual] = useState('') 
   const [dobTouched, setDobTouched] = useState(false)
 
   const parsedDob = useMemo(() => {

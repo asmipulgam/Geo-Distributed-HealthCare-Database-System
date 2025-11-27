@@ -10,12 +10,10 @@ export default function LoginScreen(){
   const navigate = useNavigate()
   const location = useLocation()
 
-  // `from` may be a location object or a pathname string. Prefer the pathname when available.
-  // If no state was set (LoginScreen rendered directly as the route element), fall back to the
-  // current pathname so we redirect back to the same protected route after login.
+
   const from = location.state?.from?.pathname || location.state?.from || location.pathname || '/admin'
 
-  // If already authenticated on mount, redirect to the original destination.
+
   useEffect(() => {
     if (isAuthenticated()) {
       navigate(from, { replace: true })
@@ -27,14 +25,9 @@ export default function LoginScreen(){
     setLoading(true)
     setError(null)
     try {
-      // Support both sync and async `login` implementations.
       const res = await Promise.resolve(login(username.trim(), password))
       setLoading(false)
       if (res && res.ok){
-        // Perform a hard navigation so the top-level routing logic re-evaluates
-        // authentication (some routes conditionally render the LoginScreen
-        // inline and won't update correctly without a full reload). Using
-        // window.location ensures the app initializes in the authenticated state.
         window.location.href = from
         return
       } else {
