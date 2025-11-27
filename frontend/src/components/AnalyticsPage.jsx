@@ -36,7 +36,6 @@ function Histogram({ data, valueAccessor, buckets = 10, width = 600, height = 20
 }
 
 function Pie({ data, accessor, width = 200, height = 200 }) {
-    // Accept either an array of items with accessor or a counts object {key: count}
     let counts = {};
     if (!Array.isArray(data) && data && typeof data === 'object') {
         counts = data;

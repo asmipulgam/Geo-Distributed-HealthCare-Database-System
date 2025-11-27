@@ -1,21 +1,3 @@
-#!/usr/bin/env python3
-"""Load CSV data files from central_backend/data into the databases using DBClient.
-
-This script looks for:
- - central_backend/data/Doctors.csv
- - central_backend/data/Patients_US-WEST.csv
- - central_backend/data/Patients_US-CENTRAL.csv
- - central_backend/data/Patients_US-EAST.csv
-
-It will use the `DBClient` helper methods `bulk_insert_doctors` and
-`bulk_insert_patients`. If a connection is available in `db.connections`
-for the target region it will be used; otherwise the DBClient will attempt
-to open a connection (and fall back to configured backups if enabled).
-
-Usage:
-    python3 load_data.py
-
-"""
 from pathlib import Path
 import csv
 import sys
@@ -49,8 +31,6 @@ def load_doctors(db: DBClient, data_dir: Path, region_key: str):
     success = False
     err = None
     try:
-        # let the client pick an appropriate connection if None
-        
         db.bulk_insert_doctors(None, rows, batch_size=1000, upsert=True, region=region_key)
         success = True
         print("Doctors loaded.")
@@ -63,7 +43,6 @@ def load_doctors(db: DBClient, data_dir: Path, region_key: str):
 
 
 def load_patients_for_region(db: DBClient, data_dir: Path, region_key: str):
-    # region_key e.g. 'us-west' -> file Patients_US-WEST.csv
     fname = f"Patients_{region_key.upper()}.csv"
     p = data_dir / fname
     rows = read_csv_rows(p)
@@ -84,7 +63,6 @@ def load_patients_for_region(db: DBClient, data_dir: Path, region_key: str):
         print(f"Failed to load patients for {region_key}: {e}")
     finally:
         duration = time.perf_counter() - start
-        # if prometheus labels available, record duration
         
         return {"type": "patients", "region": region_key, "rows": len(rows), "success": success, "error": err, "seconds": duration}
 
@@ -106,16 +84,11 @@ def main():
         res = load_doctors(db, data_dir, region_key=rk)
         if res is not None:
             metrics.append(res)
-
-    # Load patients for regions we expect files for
     for rk in ( 'US-CENTRAL',):
-        # convert file-style to region key used by DBClient
         region_key = rk.lower()
         r = load_patients_for_region(db, data_dir, region_key)
         if r is not None:
             metrics.append(r)
-
-    # write a small JSON summary to data dir so CI / demo scripts can read durations
     summary = {
         'timestamp': time.time(),
         'metrics': metrics
@@ -130,7 +103,7 @@ def main():
 
    
 
-    # Attempt to generate local plots/report if the plotting utility is available
+
     try:
         from plot_load_metrics import main as _plot_main
         try:
@@ -139,7 +112,6 @@ def main():
         except Exception as e:
             print("plot_load_metrics failed:", e)
     except Exception:
-        # plotting script not present or matplotlib not installed; ignore
         pass
 
 

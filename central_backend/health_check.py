@@ -1,4 +1,3 @@
-# health_checker.py
 import threading
 import time
 import psycopg2
@@ -6,6 +5,8 @@ from psycopg2 import OperationalError, InterfaceError, DatabaseError
 from typing import Dict, Optional
 
 
+# This code is responsible for checking periodically if all the cluster instances are active or not
+# not rigidly integrated into the dashboard, but can be extended to build many useful monitoring features and metrics.
 class HealthChecker:
     def __init__(self, dsn: str, interval: float = 2.0, connect_timeout: float = 2.0, name: str = "db"):
         self._dsn = dsn

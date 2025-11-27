@@ -43,18 +43,6 @@ def readUrls():
     CONNECTION_URLS["central"] = getFormattedURL(config.get('DEFAULT', 'centralURL'), useSecure)
 
 def setupDatabase(connection_url, region, sql_file=None):
-    """
-    Create/connect to the database and run setup SQL.
-
-    If `sql_file` is provided and exists, its contents will be executed.
-    The function first attempts to execute the full file as a single statement;
-    if that fails (some drivers reject multiple statements), it falls back to
-    splitting on `;` and executing statements one-by-one (naive split).
-
-    Note: For complex SQL files (with PL/pgSQL blocks) the naive splitter may
-    not be sufficient; in that case prefer running the SQL file with the
-    `psql`/cockroach CLI or using a server-side migration tool.
-    """
 
     conn = psycopg2.connect(connection_url)
     cursor = conn.cursor()
@@ -67,27 +55,11 @@ def setupDatabase(connection_url, region, sql_file=None):
                 sql = fh.read()
             print(f"Executing SQL : {sql}")
 
-            # Try executing the whole file at once first (works for many simple SQL files)
             try:
                 cursor.execute(sql)
             except Exception as e:
-                # Try a smarter SQL splitter (sqlparse) before falling back to naive split
                 print("Top-level execute failed, attempting statement-level execution; error:", e)
-                # try:
-                #     import sqlparse
-                #     statements = [s.strip() for s in sqlparse.split(sql) if s.strip()]
-                # except Exception:
-                #     # Last-resort naive splitter (may break on dollar-quoted functions)
-                #     statements = [s.strip() for s in sql.split(';') if s.strip()]
-
-                # for stmt in statements:
-                #     if stmt:
-                #         try:
-                #             cursor.execute(stmt)
-                #         except Exception as e2:
-                #             print(f"Failed executing statement (skipping): {e2}\nStatement:\n{stmt[:200]}...")
         else:
-            # Example setup commands; replace with actual setup logic as needed
             print(f"Unable to read SQL setup file. Please check your system again.")
 
         conn.commit()
@@ -98,7 +70,6 @@ def setupDatabase(connection_url, region, sql_file=None):
 
 def setup_func():
     readUrls()
-    # Optional: look for an SQL file named `schema.sql` in the same folder by default
 
     for i in CONNECTION_URLS:
         try:

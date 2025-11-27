@@ -1,35 +1,20 @@
-import logging
 import requests
 from typing import Any, Dict, List, Optional
 
-_LOG = logging.getLogger(__name__)
 
-
+# Based on the classroom discussion for a UI similar to Local cluster Admin UI, We 
+# are interfacing with cloud cockroachDB API to get the cluster details like region and node information
+# This is limited due to restricted support on free tier.
+# More details and controls can be done if production ready dedicated clusters is used on cockroachDB (PAID/Enterprise Hosting)
 class CloudClient:
-    """Small HTTP client for interacting with a CockroachDB cloud-like REST API.
-
-    This class implements a few convenience methods commonly provided by
-    managed database providers' HTTP APIs:
-      - list_clusters / get_operational_clusters: enumerate clusters
-      - get_cluster: retrieve details for a specific cluster id
-
-    Usage:
-      client = CloudClient('https://api.cockroachlabs.cloud', api_key='...')
-      clusters = client.list_clusters()
-      operational = client.get_operational_clusters()
-      details = client.get_cluster('cluster-id')
-    """
-
     def __init__(self, base_url: str = "https://cockroachlabs.cloud/api/v1", api_key: Optional[str] = None, timeout: int = 10, session: Optional[requests.Session] = None):
         self.base_url = base_url.rstrip('/')
         self.api_key = api_key
         self.timeout = timeout
         self.session = session or requests.Session()
         if api_key:
-            # Common header approach; some APIs use Authorization: Bearer <key>
             self.session.headers.update({'Authorization': f'Bearer {api_key}'})
 
-        # Ensure we accept JSON responses
         self.session.headers.setdefault('Accept', 'application/json')
         self.cluster_details={}
 
@@ -39,12 +24,11 @@ class CloudClient:
         try:
             resp = self.session.request(method, url, **kwargs)
         except requests.RequestException as e:
-            _LOG.debug('HTTP request failed: %s %s %s', method, url, e)
+            print("Error connecting to CDB API:", e)
             raise
 
         content_type = resp.headers.get('Content-Type', '')
         if not resp.ok:
-            # Try to include json error message when available
             try:
                 detail = resp.json()
             except Exception:
@@ -56,33 +40,15 @@ class CloudClient:
         return resp.text
 
     def list_clusters(self, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-        """Return a list of clusters.
-
-        This method expects the API to return an object containing a list of
-        clusters (common keys: `clusters`, `data`, or top-level list). The
-        implementation tries several common response shapes and returns a flat
-        list of cluster dicts.
-        """
         params = params or {}
         data = self._request('GET', '/clusters', params=params)
-        #print(data)
 
         return data
 
     def get_cluster(self, cluster_id: str) -> Dict[str, Any]:
-        """Retrieve details for a specific cluster by id.
-
-        Calls GET /clusters/{cluster_id} and returns the parsed JSON.
-        """
         return self._request('GET', f'/clusters/{cluster_id}')
 
     def get_operational_clusters(self) -> Dict[str, Any]:
-        """Return a dict with count and list of operational cluster details.
-
-        Operational is a heuristic: clusters whose `status` field indicates they
-        are running/healthy. We treat status values containing one of these
-        tokens as operational: 'running', 'healthy', 'ready', 'ok', 'active'.
-        """
         clusters = self.list_clusters()
         ok_tokens = {'running', 'healthy', 'ready', 'ok', 'active'}
         operational = []
@@ -152,18 +118,6 @@ class CloudClient:
                     self.cluster_details[id]["nodes"].append({
                     "node_region": region_name,
                     "node_id": region_id.replace('us-east1','us-east1c')
-                    })
-        #self.manuallyAddEastNodes()
-
-    def manuallyAddEastNodes(self):
-            id="0b7cee76-dc84-441d-9417-b7274fb36cdc"
-            primary_region = "us-east4"
-            regions = ["us-east4a","us-east4b","us-east4c"]
-            for i in range(3):
-                region_id = f"{id}.gcp.aws-us-east-1.cockroachlabs.cloud:26257"
-                self.cluster_details[id]["nodes"].append({
-                    "node_region": primary_region,
-                    "node_id": region_id.replace('us-east4',regions[i])
                     })
 
     def getClusterDetails(self):

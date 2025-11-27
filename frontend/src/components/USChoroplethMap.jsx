@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { geoAlbersUsa, geoPath } from 'd3-geo'
 import { feature } from 'topojson-client'
 
-// GCP zones to highlight with approximate [lon, lat]
+
 const ZONES = [
   // us-west2 (Los Angeles area) approximate locations for a/b/c
   { name: 'us-west2-a', coords: [-118.25, 34.05] },
