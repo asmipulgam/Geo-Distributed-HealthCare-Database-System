@@ -202,38 +202,100 @@ def api_all():
     except Exception:
         page_size = 20
 
-    # Map region to DSN; adjust ports if your local setup differs
-    dsn = db.getURL({"region": region})
-    # map short region to table name: use patients_west for west, patients_central for others
+    # Determine logical table name based on the requested region. We want to
+    # query the logical patients table for the requested region (e.g. when
+    # requesting 'us-west' we should query `patients_west`) even if the actual
+    # DSN we connect to is a backup (e.g. us-east).
     table_name = ('patients_west' if 'west' in str(region) else 'patients_central')
-    fetcher = FetchAll(dsn=dsn)
-    fetcher.table_name = table_name
+
+    # Resolve the DSN we'll use for this request (may be primary or a backup).
+    used_region = region
+    used_dsn = None
     try:
-        page = fetcher.fetch(cursor=cursor, dir=dir, page_size=page_size)
-        # If the fetcher returned metrics, record them for admin UI
+        conn_for_region, used_region_resolved, created_tmp = db.get_connection_for_region(region, allow_backup=True)
+    except Exception:
+        conn_for_region = None
+        used_region_resolved = None
+        created_tmp = False
+
+    if used_region_resolved:
+        used_region = used_region_resolved
+
+    # Map resolved region to a DSN (fall back to the logical region's configured URL)
+    used_dsn = db.getURL({"region": used_region}) or db.getURL({"region": region})
+    try:
+        if created_tmp and conn_for_region is not None:
+            conn_for_region.close()
+    except Exception:
+        pass
+
+    fetcher = FetchAll(dsn=used_dsn)
+    fetcher.table_name = table_name
+
+    # Helper to record metrics consistently
+    def _record_page_metrics(page_obj, used_region_val):
         try:
-            m = page.get("metrics")
+            m = page_obj.get("metrics")
             if m:
                 entry = {
                     "timestamp": datetime.utcnow().isoformat() + "Z",
                     "region": region,
+                    "used_region": used_region_val,
                     "cursor": cursor,
                     "page_size": page_size,
-                    # keep legacy `metrics` object for debugging
                     "metrics": m,
-                    # normalize common fields so UI can render consistently
                     "rows": int(m.get('rows')) if isinstance(m.get('rows'), (int, float)) else (m.get('rows') or 0),
                     "elapsed_ms": int(m.get('select_time_ms')) if m.get('select_time_ms') is not None else None,
                 }
                 RECENT_METRICS.insert(0, entry)
-                # keep recent history bounded
                 if len(RECENT_METRICS) > 50:
                     RECENT_METRICS.pop()
         except Exception:
             pass
+
+    try:
+        page = fetcher.fetch(cursor=cursor, dir=dir, page_size=page_size)
+        # Attach used_region to the response so clients know where the data came from
+        try:
+            if isinstance(page, dict):
+                page['used_region'] = used_region
+        except Exception:
+            pass
+        _record_page_metrics(page, used_region)
         return jsonify(page), 200
     except Exception as e:
-        print(f"Error fetching data: {e}")
+        print(f"Primary fetch failed (dsn={used_dsn}): {e}")
+        # Attempt a targeted fallback: try the configured backup DSN for the
+        # requested logical region and re-run the same logical-table query.
+        try:
+            backup_token = db.__getReplicaURL({"region": region})
+        except Exception:
+            backup_token = None
+
+        if backup_token:
+            # If backup_token is a region key, resolve to its configured URL
+            backup_dsn = db.getURL({"region": backup_token}) or backup_token
+            try:
+                alt_fetcher = FetchAll(dsn=backup_dsn)
+                alt_fetcher.table_name = table_name
+                try:
+                    page2 = alt_fetcher.fetch(cursor=cursor, dir=dir, page_size=page_size)
+                    try:
+                        if isinstance(page2, dict):
+                            page2['used_region'] = backup_token
+                    except Exception:
+                        pass
+                    _record_page_metrics(page2, backup_token)
+                    return jsonify(page2), 200
+                finally:
+                    try:
+                        alt_fetcher.close()
+                    except Exception:
+                        pass
+            except Exception as e2:
+                print(f"Fallback fetch also failed (backup={backup_token}): {e2}")
+
+        # No fallback succeeded — return original error
         return jsonify({"error": str(e)}), 500
     finally:
         try:

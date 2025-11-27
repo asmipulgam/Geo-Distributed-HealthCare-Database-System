@@ -186,17 +186,30 @@ class DBClient:
             except Exception:
                 backup_dsn = None
             if backup_dsn:
-                try:
-                    conn = psycopg2.connect(backup_dsn)
-                    # find backup region key by matching LOCAL_URLS value
-                    backup_region = None
-                    for k, v in LOCAL_URLS.items():
-                        if v == backup_dsn:
-                            backup_region = k
-                            break
-                    return conn, backup_region or region_key, True
-                except Exception as e:
-                    print(f"Backup connect failed for {region_key}: {e}")
+                # backup_dsn may be either a full DSN string or a logical region key
+                backup_url = None
+                # If backup_dsn matches a known region key, resolve to its configured URL
+                if isinstance(backup_dsn, str) and backup_dsn in LOCAL_URLS:
+                    backup_url = LOCAL_URLS.get(backup_dsn)
+                else:
+                    # Otherwise assume it's a DSN/url; if it's a short token like 'us-east', try LOCAL_URLS lookup as well
+                    backup_url = LOCAL_URLS.get(backup_dsn) or backup_dsn
+
+                if backup_url:
+                    try:
+                        conn = psycopg2.connect(backup_url)
+                        # find backup region key by matching LOCAL_URLS value
+                        backup_region = None
+                        for k, v in LOCAL_URLS.items():
+                            if v == backup_url:
+                                backup_region = k
+                                break
+                        # If we couldn't map by value, and backup_dsn itself is a known region key, use it
+                        if not backup_region and isinstance(backup_dsn, str) and backup_dsn in LOCAL_URLS:
+                            backup_region = backup_dsn
+                        return conn, backup_region or region_key, True
+                    except Exception as e:
+                        print(f"Backup connect failed for {region_key}: {e}")
 
         return None, None, False
     
@@ -361,22 +374,27 @@ class DBClient:
 
         conn = self.connections.get(region)
         created_conn = False
-        if conn is None:
-            # Fall back to default mapping via getURL
-            dsn = self.getURL({'region': region})
-            if not dsn:
-                conn = None
-            else:
-                conn = psycopg2.connect(dsn)
-                created_conn = True
+        used_region = region
+
+        # Acquire/establish connection inside the try so connection errors
+        # are caught by the fallback logic below.
         try:
+            if conn is None:
+                # Use helper that can try primary and backup DSNs
+                conn, used_region, created_conn = self.get_connection_for_region(region, allow_backup=True)
+            # If still no connection, raise so fallback logic triggers
+            if conn is None:
+                raise RuntimeError(f"No DB connection available for region {region}")
+
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute(sql, params)
                 rows = cur.fetchall()
                 # return plain list of dicts
+                print("7")
                 return [dict(r) for r in rows]
         except Exception as e:
             # Attempt fault-tolerant fallback to us-east if primary region failed
+            print("8")
             try:
                 print(f"Primary DB request for region '{region}' failed: {e}. Attempting fallback to 'us-east'.")
                 # close ephemeral primary connection if we created it

@@ -113,14 +113,3 @@ AS $$
     )
   );
 $$;
-
---- SAMPLE
-SELECT
-  id, first_name, last_name, email,
-  lat, lon,
-  haversine_km(lat, lon, 31.4255, -111.94) AS distance_km
-FROM patients_central
-WHERE lat IS NOT NULL AND lon IS NOT NULL
-ORDER BY distance_km ASC
-LIMIT 5;
---- note: sample adjusted to query central table name

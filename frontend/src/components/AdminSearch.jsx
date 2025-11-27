@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { BACKEND_URL } from './constants';
 
 const COLS = [
@@ -53,10 +52,8 @@ export default function AdminSearch() {
             setColumnMap({});
         }
     }, [results]);
-
     function getValueFromRow(row, col) {
         if (!row) return '';
-
 
         function unwrap(r) {
             if (!r) return r;
@@ -97,6 +94,20 @@ export default function AdminSearch() {
         }
 
         return '';
+    }
+
+   
+
+    function formatCellValue(v) {
+        // Ensure booleans are visible in the table (React doesn't render boolean false)
+        if (v === true) return 'Yes';
+        if (v === false) return 'No';
+        if (v === null || v === undefined) return '';
+        // For objects/arrays, try JSON preview for debug; otherwise toString
+        if (typeof v === 'object') {
+            try { return JSON.stringify(v); } catch { return String(v); }
+        }
+        return String(v);
     }
 
 
@@ -262,21 +273,22 @@ export default function AdminSearch() {
                 <div>
                     <h3 className="font-medium mb-2">Results ({results.length})</h3>
                     {loading ? <div>Loading...</div> : (
-                        <div className="overflow-auto border rounded bg-white">
-                            <table className="min-w-full text-sm">
+                        <div className="overflow-auto border rounded bg-white shadow-sm">
+                            <table className="min-w-full text-sm table-fixed border border-gray-300 bg-white rounded-sm">
                                 <thead className="bg-gray-100">
                                     <tr>
-                                        {COLS.map(c => <th key={c} className="px-2 py-1 text-center text-black">{c}</th>)}
+                                        {COLS.map(c => <th key={c} className="px-2 py-1 text-center text-black border border-gray-300">{c}</th>)}
                                     </tr>
                                 </thead>
-                                <tbody>
+                                <tbody className="divide-y divide-gray-200">
                                         {results.map((r, idx) => (
-                                            <tr key={idx} className="border-t">
+                                            <tr key={idx} className="bg-white">
                                                 {COLS.map(c => {
 
                                                     const mapped = columnMap[c];
-                                                    const val = mapped && Object.prototype.hasOwnProperty.call(r, mapped) ? r[mapped] : getValueFromRow(r, c);
-                                                    return <td key={c} className="px-2 py-1 text-black">{val}</td>;
+                                                    const rawVal = mapped && Object.prototype.hasOwnProperty.call(r, mapped) ? r[mapped] : getValueFromRow(r, c);
+                                                    const val = formatCellValue(rawVal);
+                                                    return <td key={c} className="px-2 py-1 text-black border-l border-gray-200 text-center">{val}</td>;
                                                 })}
                                             </tr>
                                         ))}

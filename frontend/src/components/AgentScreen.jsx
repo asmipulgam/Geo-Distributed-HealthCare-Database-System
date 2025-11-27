@@ -12,6 +12,7 @@ export default function Agent() {
     const [count, setCount] = useState(0);
     const [offset, setOffset] = useState(0);
     const [queryMs, setQueryMs] = useState(null);
+    const [fetchedFrom, setFetchedFrom] = useState(region);
     const fetchRecords = async (cursor = 0, dir = "next") => {
         setLoading(true);
         try {
@@ -28,13 +29,16 @@ export default function Agent() {
             setOffset(pRes.offset ?? 0);
             // capture query timing reported by backend (milliseconds)
             try {
-                const qm = pRes.metrics && (pRes.metrics.select_time_ms ?? pRes.metrics.select_time_ms === 0 ? pRes.metrics.select_time_ms : null);
+                const qm = (pRes.metrics && (pRes.metrics.select_time_ms ?? pRes.metrics.elapsed_ms)) ?? pRes.elapsed_ms ?? null;
                 setQueryMs(qm !== undefined ? qm : null);
             } catch (e) {
                 setQueryMs(null);
             }
-        } catch (e) {
-            console.error("Issue fetching paginated data:", e);
+            // Use server-reported `used_region` if present (provenance)
+            setFetchedFrom(pRes.used_region ?? region);
+        } catch {
+            console.error("Issue fetching paginated data");
+            // Let server-side fault tolerance handle retries. Show no change to `fetchedFrom`.
         } finally {
             setLoading(false);
         }
@@ -42,7 +46,9 @@ export default function Agent() {
 
 
     useEffect(() => {
+        // call directly — fetchRecords doesn't need to be listed as a dependency
         fetchRecords(0, "next");
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [region]);
 
     return (
@@ -51,7 +57,7 @@ export default function Agent() {
                 <header className="flex items-center justify-between mb-6">
                     <div>
                         <h2 className="text-3xl font-semibold text-white">All Patients</h2>
-                        <p className="text-sm text-gray-400">Region — <span className="font-medium text-gray-200">{region}</span></p>
+                            <p className="text-sm text-gray-400">Region — <span className="font-medium text-gray-200">{region}</span>{fetchedFrom && fetchedFrom !== region ? (<span className="ml-2 text-yellow-300">(served from {fetchedFrom})</span>) : null}</p>
                     </div>
                     <div className="text-right">
                         <div className="text-sm text-gray-400">{loading ? "Loading…" : `Showing ${offset+1}-${Math.min(offset + records.length, count)} of ${count}`}</div>
