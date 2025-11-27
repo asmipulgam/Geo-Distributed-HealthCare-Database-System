@@ -5,10 +5,6 @@ import { useNavigate } from "react-router-dom";
 import { BACKEND_URL, US_STATES } from './constants';
 
 
-function isDigits(str) {
-  return /^\d+$/.test(str)
-}
-
 function parseYYYYMMDD(str) {
   // Accepts YYYY-MM-DD strictly
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str)
@@ -18,7 +14,6 @@ function parseYYYYMMDD(str) {
   const monthIndex = Number(mo) - 1
   const day = Number(d)
   const dt = new Date(Date.UTC(year, monthIndex, day))
-  // Basic sanity: month/day preserved
   if (
     dt.getUTCFullYear() !== year ||
     dt.getUTCMonth() !== monthIndex ||
