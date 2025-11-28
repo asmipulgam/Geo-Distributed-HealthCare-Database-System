@@ -13,30 +13,56 @@
 
 /* Full-bleed container, no centered card or dark edges */
 .login-container {
+  position: relative;
   min-height: 100vh;
-  display: block;
-  background: var(--bg);
-  color: var(--text);
   width: 100%;
   max-width: 100%;
-  overflow-x: hidden;
+  color: var(--text);
+  overflow: hidden;
+
+  /* ✅ Background image is coming from inline React style */
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-/* Make the card span the full viewport width/height */
+.login-container::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  /* ✅ TRANSLUCENT WHITE OVERLAY */
+  background: rgba(255, 255, 255, 0.55);
+
+  z-index: 0;
+}
+
+
 .login-card {
+  position: relative;
+  z-index: 1;             /* ✅ Stays above translucent overlay */
+
   width: 100%;
-  max-width: none;
-  min-height: 100vh;
-  background: var(--card);
-  border: 0;
-  border-radius: 0;
-  padding: 24px;
-  box-shadow: none;
+  max-width: 460px;
+  min-height: auto;
+
+  background: rgba(255, 255, 255, 0.97);  /* ✅ Almost solid, still soft */
+  border-radius: 14px;
+  padding: 28px;
+
+  box-shadow: 0 10px 40px rgba(0,0,0,0.22);
+
   display: grid;
   align-content: start;
   gap: 16px;
   box-sizing: border-box;
 }
+
+
 
 .login-title {
   font-size: 1.6rem;
