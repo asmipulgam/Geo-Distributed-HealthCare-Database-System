@@ -1,8 +1,3 @@
--- Schema for 'west' database
--- CREATE DATABASE IF NOT EXISTS west;
--- USE west;
-
--- Doctors table: simple reference table for providers
 CREATE TABLE IF NOT EXISTS doctors (
   "Doctor_ID" STRING PRIMARY KEY,
   "Doctor_Name" STRING,

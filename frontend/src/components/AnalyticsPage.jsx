@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
+import { BACKEND_URL } from './constants';
 
 function Histogram({ data, valueAccessor, buckets = 10, width = 600, height = 200 }) {
     const vals = data.map(valueAccessor).map(v => Number(v)).filter(v => !isNaN(v));
@@ -36,7 +37,6 @@ function Histogram({ data, valueAccessor, buckets = 10, width = 600, height = 20
 }
 
 function Pie({ data, accessor, width = 200, height = 200 }) {
-    // Accept either an array of items with accessor or a counts object {key: count}
     let counts = {};
     if (!Array.isArray(data) && data && typeof data === 'object') {
         counts = data;
@@ -75,7 +75,7 @@ export default function AnalyticsPage() {
     const [loading, setLoading] = useState(false);
     useEffect(() => {
         setLoading(true);
-        fetch('/api/analytics/summary')
+        fetch(`${BACKEND_URL}/api/analytics/summary`)
             .then(r => r.json())
             .then(d => { setAnalytics(d); setLoading(false); })
             .catch(e => { console.error('analytics fetch', e); setLoading(false); });
@@ -92,6 +92,10 @@ export default function AnalyticsPage() {
     const byState = analytics ? (analytics.by_state || {}) : rows.reduce((acc, r) => {
         const s = (r.State || 'Unknown'); acc[s] = (acc[s] || 0) + 1; return acc;
     }, {});
+
+    // availability graph state
+    const [graphKey, setGraphKey] = useState(Date.now());
+    const refreshGraph = () => setGraphKey(Date.now());
 
     return (
         <div className="min-h-screen p-6 bg-gray-50">
@@ -129,6 +133,21 @@ export default function AnalyticsPage() {
                             </table>
                         </div>
                     </div>
+                
+                <div className="bg-white p-4 rounded shadow col-span-1 md:col-span-2 mt-6">
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-medium">Cluster Availability</h3>
+                        <button onClick={refreshGraph} className="px-3 py-1 bg-gray-100 text-sm rounded">Refresh</button>
+                    </div>
+                    <div className="flex items-center justify-center">
+                        <img
+                            src={`${BACKEND_URL}/api/availability/graph?t=${graphKey}`}
+                            alt="Availability graph"
+                            style={{ maxWidth: '100%', height: '220px', objectFit: 'contain' }}
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                    </div>
+                </div>
                 </div>
             </div>
         </div>

@@ -11,7 +11,7 @@ export default function AgentRoute() {
     const region = params.region;
 
     if (!region || !VALID_REGIONS.includes(region)) {
-        // Render ErrorPage with helpful links to valid `/agent/<region>` paths
+
         const links = VALID_REGIONS.map(r => ({ to: `/agent/${r}`, label: r }));
         return (
             <ErrorPage
@@ -22,6 +22,6 @@ export default function AgentRoute() {
         );
     }
 
-    // valid region — render the Agent screen which will read the :region param itself if needed
+
     return <Agent />;
 }

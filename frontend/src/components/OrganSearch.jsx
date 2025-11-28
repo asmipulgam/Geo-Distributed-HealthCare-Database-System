@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { BACKEND_URL } from './constants';
 
-
+//These are random list of 10 hospitals. In Future implementation, this can be integrated with
+// Google Maps or Hospital Directory such that cooridinates can be fetched dynamically
+// and displayed accordingly
 const HOSPITALS = [
     { id: 'h1', name: 'Saint Mary Medical Center', address: '123 Main St, Los Angeles, CA', lat: 34.0522, lng: -118.2437, region: 'us-west', state: 'CA' },
     { id: 'h2', name: 'Pioneer Regional Hospital', address: '456 Oak Ave, San Francisco, CA', lat: 37.7749, lng: -122.4194, region: 'us-west', state: 'CA' },

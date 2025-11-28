@@ -9,15 +9,13 @@ search = SearchEngine()  # faster
 
 fake = Faker('en_US')
 
-# ----------------------------
-# CONFIGURATION
-# ----------------------------
+
 NUM_DOCTORS = 10000
 PATIENTS_PER_REGION = 90000
 # Regions to generate
-REGIONS = ["us-west", "us-central"]#, "us-east"]
+REGIONS = ["us-west", "us-central"]
 
-# State -> region mapping (as provided)
+# State -> region mapping 
 STATE_TO_REGION = {
   "AL": "us-east",
   "AK": "us-west",
@@ -76,7 +74,7 @@ REGION_TO_STATES = {}
 for st, rg in STATE_TO_REGION.items():
     REGION_TO_STATES.setdefault(rg, []).append(st)
 
-# Define rough coordinate ranges per region (approximate USA ranges)
+# Define rough coordinate ranges per region 
 REGION_COORDS = {
     "us-west": {
         "lat_min": 32.0, "lat_max": 49.0,   # California to Washington
@@ -92,13 +90,10 @@ REGION_COORDS = {
     }
 }
 
-# Cache of state -> list of real ZIP codes (populated on demand)
+# Cache of state -> list of real ZIP codes
 ZIP_CACHE = {}
 
 def get_zip_for_state(state_abbr):
-    """Return a real ZIP code for the given state abbreviation using uszipcode.
-    Caches the per-state list for speed. Falls back to Faker if lookup fails.
-    """
     state_abbr = (state_abbr or '').upper()
     if not state_abbr:
         return fake.zipcode()
@@ -108,14 +103,12 @@ def get_zip_for_state(state_abbr):
 
     zips = []
     try:
-        # try to fetch many zipcodes for the state; returns list of SimpleZipcode objects
         results = search.by_state(state_abbr, returns=5000)
         for z in results:
             code = getattr(z, 'zipcode', None) or getattr(z, 'zip', None)
             if code:
                 zips.append(code)
     except Exception:
-        # uszipcode API may differ; attempt a smaller fetch or fallback
         try:
             results = search.by_state(state_abbr)
             for z in results:
@@ -125,20 +118,16 @@ def get_zip_for_state(state_abbr):
         except Exception:
             zips = []
 
-    # filter and dedupe
     zips = list({s for s in zips if isinstance(s, str) and s.strip()})
     ZIP_CACHE[state_abbr] = zips
     if zips:
         return random.choice(zips)
-    # final fallback: use faker
     try:
         return fake.zipcode_in_state(state_abbr)
     except Exception:
         return fake.zipcode()
 
-# ----------------------------
-# STEP 1: Generate Doctor Table (West + Central)
-# ----------------------------
+
 def generate_doctors(num_doctors):
     doctors = []
     used_ids = set()
@@ -169,10 +158,6 @@ def save_doctors_csv(doctors):
             writer.writerow([d["Doctor_ID"], d["Doctor_Name"], d["Hospital"], d["Region"]])
     print(f"{len(doctors)} doctor records written → {out_path}")
 
-
-# ----------------------------
-# STEP 2: Generate Patient Tables + Locations
-# ----------------------------
 def generate_patients(region, doctors, count):
     data_dir = Path(__file__).resolve().parent.parent / 'central_backend' / 'data'
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -182,7 +167,6 @@ def generate_patients(region, doctors, count):
         
         patient_writer = csv.writer(pf)
 
-        # Headers (Phone removed) — use boolean is_organ_donor column
         patient_writer.writerow([
             "Patient_ID", "Patient_Name", "Doctor_ID", "Doctor_Name",
             "Age", "Gender", "Phone","Email", "Address", "State",
@@ -206,19 +190,15 @@ def generate_patients(region, doctors, count):
             age = random.randint(18, 90)
             gender = random.choice(["Male", "Female", "Other"])
             dob = fake.date_of_birth(minimum_age=age, maximum_age=age).strftime("%Y-%m-%d")
-            # boolean flag for organ donor
             is_organ_donor = random.choice([True, False])
-            # choose a state belonging to this region
             state_choice = random.choice(REGION_TO_STATES.get(region, ["UNKNOWN"]))
 
-            # Build address components with a ZIP tied to the chosen state when possible
             street = fake.street_address()
             city = fake.city()
             zipcode = get_zip_for_state(state_choice)
 
             address = f"{street}, {city}, {state_choice} {zipcode}"
 
-            # Prefer uszipcode lookup by ZIP for coordinates (fast, offline)
             lat = None
             lon = None
             try:
@@ -230,11 +210,9 @@ def generate_patients(region, doctors, count):
                 lat = None
                 lon = None
 
-            # Fallback: sample lat/lon within region bounds if uszipcode lookup failed
             if lat is None or lon is None:
                 lat = round(random.uniform(REGION_COORDS[region]["lat_min"], REGION_COORDS[region]["lat_max"]), 5)
                 lon = round(random.uniform(REGION_COORDS[region]["lon_min"], REGION_COORDS[region]["lon_max"]), 5)
-            # Write patient record
             patient_writer.writerow([
                 patient_id,
                 fake.name(),
@@ -261,9 +239,6 @@ def generate_patients(region, doctors, count):
     print(f" {count} unique patient records generated for {region} → {patient_file}")
 
 
-# ----------------------------
-# STEP 3: Run the pipeline
-# ----------------------------
 if __name__ == "__main__":
     doctors = generate_doctors(NUM_DOCTORS)
     save_doctors_csv(doctors)
