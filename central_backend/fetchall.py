@@ -1,0 +1,162 @@
+"""
+Simple pagination helper for node backend.
+Provides FetchAll class which connects to CockroachDB (Postgres-compatible) and
+returns page results from `patients` table as JSON-friendly dicts.
+
+Usage:
+    fetcher = FetchAll(dsn="postgresql://root@localhost:26257/west?sslmode=disable")
+    page = fetcher.fetch(cursor=0, dir='next', page_size=20)
+    # page -> {'records': [...], 'nextIndex': 20 or None, 'prevIndex': 0 or None, 'count': total}
+
+This is intentionally simple (offset-based pagination) for demonstration purposes.
+For production/useful systems consider keyset-pagination for large tables.
+"""
+
+from typing import Optional, Dict, Any
+import psycopg2
+from psycopg2.extras import RealDictCursor
+import time
+import json
+
+# Column order used in app.py; returned dicts will include these keys
+COLS = [
+    "Patient_ID",
+    "Patient_Name",
+    "Doctor_ID",
+    "Doctor_Name",
+    "Age",
+    "Gender",
+    "Phone",
+    "Email",
+    "Address",
+    "State",
+    "Region",
+    "Appointment_Date",
+    "Diagnosis",
+    "Date_of_Birth",
+    "is_organ_donor",
+    "lat",
+    "lon",
+]
+
+
+
+class FetchAll:
+    def __init__(self, dsn: Optional[str] = None):
+        self.dsn = dsn 
+        self.conn = None
+        # allow caller to override the patients table name (e.g., patients_west)
+        self.table_name = 'patients_central'
+
+    def _connect(self):
+        if self.conn is None or self.conn.closed:
+            self.conn = psycopg2.connect(self.dsn)
+
+    def close(self):
+        if self.conn:
+            try:
+                self.conn.close()
+            finally:
+                self.conn = None
+
+    def fetch(self, cursor: Optional[int] = 0, dir: str = "next", page_size: int = 20) -> Dict[str, Any]:
+        """
+        Fetch a page of rows from patients.
+        - cursor: offset index (int). If None or 0, starts at beginning.
+        - dir: 'next' or 'prev'. For 'prev' the returned prevIndex will be max(0, cursor-page_size).
+        - page_size: number of rows to return.
+
+        Returns dict with keys: records (list of dicts), nextIndex (int or None), prevIndex (int or None), count (total rows)
+        """
+        self._connect()
+        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # total count to determine next existence
+            cur.execute(f"SELECT COUNT(*) AS cnt FROM {self.table_name};")
+            total = cur.fetchone()["cnt"] or 0
+            print("1")
+
+            try:
+                offset = int(cursor or 0)
+            except Exception:
+                offset = 0
+
+            # Treat `cursor` as the explicit offset to fetch. Caller should pass the
+            # prevIndex/nextIndex returned by earlier responses. The `dir` parameter
+            # is ignored to avoid double-adjusting the offset.
+            offset = max(0, offset)
+
+            # Defensive: don't request beyond total
+            if offset >= total and total > 0:
+                # clamp to last full page
+                last_page = max(0, (total - 1) // page_size * page_size)
+                offset = last_page
+
+            # Build the SELECT SQL (columns are quoted because some contain spaces/quotes)
+            select_sql = f"SELECT {', '.join('\"' + c + '\"' for c in COLS)} FROM {self.table_name} ORDER BY \"Patient_ID\" LIMIT %s OFFSET %s;"
+
+            # Attempt to capture a planner cost estimate via EXPLAIN (FORMAT JSON).
+            explain_json = None
+            explain_time_ms = None
+            # try:
+            #     t0 = time.time()
+            #     cur.execute("EXPLAIN (FORMAT JSON) " + select_sql, (page_size, offset))
+            #     explain_time_ms = int((time.time() - t0) * 1000)
+            #     erow = cur.fetchone()
+            #     if erow:
+            #         # RealDictCursor returns a dict-like row; take the first value which is usually the JSON text
+            #         if isinstance(erow, dict):
+            #             first_val = next(iter(erow.values()))
+            #         elif isinstance(erow, (list, tuple)):
+            #             first_val = erow[0]
+            #         else:
+            #             first_val = erow
+
+            #         # Try to parse JSON; some drivers already return parsed JSON
+            #         try:
+            #             explain_json = json.loads(first_val) if isinstance(first_val, (str, bytes)) else first_val
+            #         except Exception:
+            #             explain_json = first_val
+            # except Exception:
+            #     # EXPLAIN may not be supported or may fail on some clusters; ignore rather than crash
+            #     explain_json = None
+            #     explain_time_ms = None
+
+            # Execute the actual select and time it
+            t0 = time.time()
+            cur.execute(select_sql, (page_size, offset))
+            rows = cur.fetchall()
+            select_time_ms = int((time.time() - t0) * 1000)
+
+            # compute next/prev indices
+            next_offset = offset + page_size
+            nextIndex = next_offset if next_offset < total else None
+            prevIndex = offset - page_size if offset - page_size >= 0 else (0 if offset > 0 else None)
+
+            # Convert RealDictRows to normal dicts and ensure keys present
+            records = []
+            for r in rows:
+                rec = {k: r.get(k) for k in COLS}
+                records.append(rec)
+
+            # Build metrics about this query
+            metrics = {
+                "select_time_ms": select_time_ms,
+                "rows": len(rows),
+                "explain_time_ms": explain_time_ms,
+                "explain": explain_json,
+            }
+
+        return {
+            "records": records,
+            "nextIndex": nextIndex,
+            "prevIndex": prevIndex,
+            "count": total,
+            "offset": offset,
+            "metrics": metrics,
+        }
+
+
+if __name__ == "__main__":
+    f = FetchAll()
+    print(f.fetch(0, "next", 5))
+    f.close()

@@ -1,0 +1,20 @@
+{
+  "timestamp": 1763835575.936647,
+  "metrics": [
+    {
+      "type": "doctors",
+      "rows": 10000,
+      "success": true,
+      "error": null,
+      "seconds": 39.40610770799685
+    },
+    {
+      "type": "patients",
+      "region": "us-central",
+      "rows": 90000,
+      "success": true,
+      "error": null,
+      "seconds": 571.6124612090061
+    }
+  ]
+}

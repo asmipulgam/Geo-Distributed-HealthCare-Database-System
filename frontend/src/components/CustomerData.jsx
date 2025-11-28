@@ -1,6 +1,6 @@
 import React from "react";
 import { useLocation, Link } from "react-router-dom";
-//import "tailwindcss/index.css"
+
 
 export default function CustomerData() {
     const location = useLocation();
@@ -8,6 +8,8 @@ export default function CustomerData() {
         id: "123456",
         name: "Jane Doe"
     };
+
+    console.log("Received user data:", user);
 
     if (!user) {
         return (
@@ -37,7 +39,7 @@ export default function CustomerData() {
                             className={`${idx % 2 === 0 ? "bg-black" : "bg-gray-900"} hover:bg-gray-800 transition`}
                         >
                             <td className="py-3 px-6 font-medium capitalize">{key}</td>
-                            <td className="py-3 px-6 text-gray-300">{value.toString()}</td>
+                            <td className="py-3 px-6 text-gray-300">{value}</td>
                         </tr>
                     ))}
                     </tbody>

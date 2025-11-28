@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import '../login.css'
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import { BACKEND_URL } from './constants';
 
 const bgImage = "/src/assets/Background.png";
 
@@ -37,21 +38,84 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
     const navigate = useNavigate();
 
-  // Step 1: Health ID
+
   const [healthId, setHealthId] = useState('')
   const [healthIdTouched, setHealthIdTouched] = useState(false)
   const healthIdError = useMemo(() => {
     if (!healthId) return 'Health ID is required'
-    if (!isDigits(healthId)) return 'Health ID must be numeric'
-    if (healthId.length < 6) return 'Health ID must be at least 6 digits'
+    if (healthId.length < 9) return 'Health ID must be at least 6 digits with prefix PT-'
     return null
   }, [healthId])
 
+  const US_STATES = {
+    'AL': 'Alabama',
+    'AK': 'Alaska',
+    'AZ': 'Arizona',
+    'AR': 'Arkansas',
+    'CA': 'California',
+    'CO': 'Colorado',
+    'CT': 'Connecticut',
+    'DE': 'Delaware',
+    'FL': 'Florida',
+    'GA': 'Georgia',
+    'HI': 'Hawaii',
+    'ID': 'Idaho',
+    'IL': 'Illinois',
+    'IN': 'Indiana',
+    'IA': 'Iowa',
+    'KS': 'Kansas',
+    'KY': 'Kentucky',
+    'LA': 'Louisiana',
+    'ME': 'Maine',
+    'MD': 'Maryland',
+    'MA': 'Massachusetts',
+    'MI': 'Michigan',
+    'MN': 'Minnesota',
+    'MS': 'Mississippi',
+    'MO': 'Missouri',
+    'MT': 'Montana',
+    'NE': 'Nebraska',
+    'NV': 'Nevada',
+    'NH': 'New Hampshire',
+    'NJ': 'New Jersey',
+    'NM': 'New Mexico',
+    'NY': 'New York',
+    'NC': 'North Carolina',
+    'ND': 'North Dakota',
+    'OH': 'Ohio',
+    'OK': 'Oklahoma',
+    'OR': 'Oregon',
+    'PA': 'Pennsylvania',
+    'RI': 'Rhode Island',
+    'SC': 'South Carolina',
+    'SD': 'South Dakota',
+    'TN': 'Tennessee',
+    'TX': 'Texas',
+    'UT': 'Utah',
+    'VT': 'Vermont',
+    'VA': 'Virginia',
+    'WA': 'Washington',
+    'WV': 'West Virginia',
+    'WI': 'Wisconsin',
+    'WY': 'Wyoming'
+  };
+
+  const [state, setState] = useState('')
+  const [stateTouched, setStateTouched] = useState(false)
+  const stateError = useMemo(() => {
+    if (!state) return 'State is required'
+    if (!US_STATES[state]) return 'Invalid state selected'
+    return null
+  }, [state])
+
     const fetchUserDetails = (id) => {
         setIsLoading(true);
-        axios.post("BACKEND/getcustomer",{
-            id: id
+        axios.post(`${BACKEND_URL}/api/getcustomer`,{
+            id: id,
+            state: state
         }).then(res => {
+            console.log(res);
+            console.log(res.data);
             setUserData(res.data)
             setIsLoading(false)
             setStep(2)
@@ -59,10 +123,10 @@ export default function Login() {
 
     }
 
-  // Step 2: DOB
-  const [dobMode, setDobMode] = useState('calendar') // 'calendar' | 'manual'
-  const [dobCalendar, setDobCalendar] = useState('') // YYYY-MM-DD from <input type="date">
-  const [dobManual, setDobManual] = useState('') // YYYY-MM-DD as text
+
+  const [dobMode, setDobMode] = useState('calendar')
+  const [dobCalendar, setDobCalendar] = useState('') 
+  const [dobManual, setDobManual] = useState('') 
   const [dobTouched, setDobTouched] = useState(false)
 
   const parsedDob = useMemo(() => {
@@ -92,12 +156,17 @@ export default function Login() {
     }
   }
 
+  function validateDOB() {
+    return true;
+  }
+
   function handleLogin(e) {
     e.preventDefault()
     setDobTouched(true)
-    if (!dobError && parsedDob) {
+    if (!dobError && parsedDob && validateDOB()) {
+
       setSubmitted(true)
-        navigate("/details", { state: { user: userData } });
+        navigate("/customerdetails", { state: { user: userData } });
 
     }
   }
@@ -155,6 +224,27 @@ export default function Login() {
             </label>
             {healthIdTouched && healthIdError && (
               <div id="health-id-error" className="error">{healthIdError}</div>
+            )}
+            <label className="field">
+              <span className="field-label">State</span>
+              <select
+                className="input"
+                value={state}
+                onChange={(e) => setState(e.target.value)}
+                onBlur={() => setStateTouched(true)}
+                aria-invalid={!!(stateTouched && stateError)}
+                aria-describedby="state-error"
+              >
+                <option value="">Select a state</option>
+                {Object.entries(US_STATES).map(([abbreviation, name]) => (
+                  <option key={abbreviation} value={abbreviation}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {stateTouched && stateError && (
+              <div id="state-error" className="error">{stateError}</div>
             )}
             <div className="actions">
               <button className="btn primary" onClick={handleNext} disabled={!!healthIdError && !!isLoading}>
