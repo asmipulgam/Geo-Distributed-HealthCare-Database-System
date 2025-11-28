@@ -17,9 +17,9 @@ SCHEMA_FILES = {
 
 
 CERTS_COMMANDS_MAC_OR_LINUX = [
-    "curl --create-dirs -o $HOME/.postgresql/root_west.crt https://cockroachlabs.cloud/clusters/0fa9e1ef-c4a6-4fab-9073-947413d38e6b/cert", # west
-    "curl --create-dirs -o $HOME/.postgresql/root_central.crt https://cockroachlabs.cloud/clusters/fa15bf40-4264-454b-a7f8-d067cbd289e9/cert", # central
-    "curl --create-dirs -o $HOME/.postgresql/root_east.crt https://cockroachlabs.cloud/clusters/0b7cee76-dc84-441d-9417-b7274fb36cdc/cert" # east
+    "curl --create-dirs -o $HOME/.postgresql/root.crt https://cockroachlabs.cloud/clusters/0fa9e1ef-c4a6-4fab-9073-947413d38e6b/cert", # west
+    "curl --create-dirs -o $HOME/.postgresql/root.crt https://cockroachlabs.cloud/clusters/fa15bf40-4264-454b-a7f8-d067cbd289e9/cert", # central
+    "curl --create-dirs -o $HOME/.postgresql/root.crt https://cockroachlabs.cloud/clusters/0b7cee76-dc84-441d-9417-b7274fb36cdc/cert" # east
 ]
 
 CERTS_COMMANDS_WINDOWS = [
