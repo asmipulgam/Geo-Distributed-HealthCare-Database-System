@@ -1,9 +1,11 @@
+//import bgImage from "../assets/Background.jpg";
 import { useMemo, useState } from 'react'
 import '../login.css'
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { BACKEND_URL, US_STATES } from './constants';
 
+const bgImage = "/src/assets/Background.png";
 
 function parseYYYYMMDD(str) {
   // Accepts YYYY-MM-DD strictly
@@ -113,7 +115,15 @@ export default function Login() {
 
   if (submitted) {
     return (
-      <div className="login-container">
+      <div className="login-container"
+        style={{
+          backgroundImage: `url(${bgImage})`,
+          backgroundSize: "cover",
+          backgroundRepeat: "no-repeat",
+          backgroundPosition: "center",
+          minHeight: "100vh",             
+          width: "100%",
+          }}>
         <div className="login-card">
           <h1 className="login-title">Logged in</h1>
           <p className="login-success">Health ID: <strong>{healthId}</strong></p>
@@ -124,7 +134,16 @@ export default function Login() {
   }
 
   return (
-    <div className="login-container">
+    <div className="login-container"
+      style={{
+        backgroundImage: `url(${bgImage})`,
+        backgroundSize: "cover",
+        backgroundRepeat: "no-repeat",
+        backgroundPosition: "center",
+        minHeight: "100vh",             // ensures full screen height
+        width: "100%",
+}}
+>
       <div className="login-card">
         <h1 className="login-title">Welcome</h1>
         {step === 1 && (

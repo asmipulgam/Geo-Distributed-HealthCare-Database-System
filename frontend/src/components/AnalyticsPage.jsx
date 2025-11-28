@@ -15,8 +15,8 @@ function Histogram({ data, valueAccessor, buckets = 10, width = 600, height = 20
         if (idx < 0) idx = 0;
         if (idx >= buckets) idx = buckets - 1;
         counts[idx]++;
-    });
-    const maxCount = Math.max(...counts);
+    });   
+    const  maxCount = Math.max(...counts);
 
     return (
         <svg width={width} height={height}>
