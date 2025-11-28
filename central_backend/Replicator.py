@@ -127,7 +127,6 @@ class Replicator:
             self._target(*self._args, **self._kwargs)
 
     def _replicate_once(self):
-        print("Running")
         try:
             source_region = self._kwargs.get('source_region')
             targets = self._kwargs.get('target_regions') or self._kwargs.get('target_region') or []

@@ -12,6 +12,8 @@ import os
 import multiprocessing
 import warnings
 from CloudClient import CloudClient
+from health_check import ClusterHealthMonitor
+from flask import send_file
 from datetime import datetime
 import math
 
@@ -22,6 +24,7 @@ RECENT_METRICS = []
 
 #As mentioned in report, we will replicate data to from west and central to east and (vice versa if there is a downtime), Storing global variables for instance reference
 REPLICATORS = []
+HEALTH_MONITOR = None
 
 
 # We are running backend and frontend on same machine even for demo right, So avoiding any potentials CORS issues which can block communication
@@ -282,6 +285,40 @@ def api_all():
 def api_metrics():
     return jsonify({"metrics": RECENT_METRICS}), 200
 
+
+@app.get('/api/availability')
+def api_availability():
+    """Return recent availability metrics sampled by the health monitor.
+
+    Optional query param `since` in seconds to filter recent samples.
+    """
+    global HEALTH_MONITOR
+    if HEALTH_MONITOR is None:
+        return jsonify({'error': 'health monitor not running'}), 500
+    try:
+        since = request.args.get('since')
+        since_sec = int(since) if (since is not None and str(since).strip() != '') else None
+    except Exception:
+        since_sec = None
+    data = HEALTH_MONITOR.get_metrics(since_seconds=since_sec)
+    return jsonify({'metrics': data}), 200
+
+
+@app.get('/api/availability/graph')
+def api_availability_graph():
+    """Return a PNG availability graph generated from the health monitor's samples."""
+    global HEALTH_MONITOR
+    if HEALTH_MONITOR is None:
+        return jsonify({'error': 'health monitor not running'}), 500
+    # generate graph into default path
+    out = HEALTH_MONITOR.generate_graph()
+    if not out:
+        return jsonify({'error': 'graph generation not available'}), 500
+    try:
+        return send_file(out, mimetype='image/png')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # This is an admin search query which performs distributed query with custom filters across cluster regions
 @app.post('/api/search')
 def api_search():
@@ -484,7 +521,7 @@ def initReplicators():
         target_regions=["us-east"],
         interval=1.5,
         run_on_start=True,
-    )]
+    )
     replicator_central = Replicator(
         lambda: None,
         db_client=db,
@@ -600,6 +637,17 @@ def shutdown_replicators(signum=None, frame=None):
 
     REPLICATORS.clear()
 
+    # Stop health monitor if present
+    try:
+        global HEALTH_MONITOR
+        if HEALTH_MONITOR is not None:
+            try:
+                HEALTH_MONITOR.stop(join=False)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     print("Shutdown actions complete — exiting process.")
     # Exit immediately; watcher will force-exit if this fails
     try:
@@ -644,6 +692,19 @@ if __name__ == "__main__":
     #db.loadDoctorData(db.connections["us-west"])
     #db.loadLocalData(db.connections["us-east"])
     fetchClusterDetails()
+    # Start health monitor using configured DSNs
+    try:
+        dsns = {
+            'us-west': db.getURL({'region': 'us-west'}),
+            'us-central': db.getURL({'region': 'us-central'}),
+            'us-east': db.getURL({'region': 'us-east'}),
+        }
+        HEALTH_MONITOR = ClusterHealthMonitor(dsns, sample_interval=5.0, retention_minutes=60)
+        HEALTH_MONITOR.start()
+        print('Health monitor started')
+    except Exception as e:
+        print('Failed to start health monitor:', e)
+
     app.run(host="0.0.0.0", port=5010, debug=True)
     
     
