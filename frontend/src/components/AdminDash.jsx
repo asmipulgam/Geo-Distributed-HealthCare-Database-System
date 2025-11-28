@@ -37,6 +37,7 @@ export default function AdminDash() {
                 } catch (err) {
                     console.error('Error fetching recent metrics:', err);
                 }
+                // Its of th e below format
                 //setNodes({'1d782d03-e0b2-4caa-9383-384877b74427': {'primary_region': 'central', 'nodes': [{'node_region': 'us-central1', 'node_id': 'cotton-prawn-10234.jxf.gcp-us-central1.cockroachlabs.cloud'}, {'node_region': 'us-east1', 'node_id': 'cotton-prawn-10234.jxf.gcp-us-east1.cockroachlabs.cloud'}, {'node_region': 'us-west2', 'node_id': 'cotton-prawn-10234.jxf.gcp-us-west2.cockroachlabs.cloud'}]}, '588e784c-737a-46ea-a410-05ffbba8bd85': {'primary_region': 'west', 'nodes': [{'node_region': 'us-central1', 'node_id': 'sixear-gundi-10233.jxf.gcp-us-central1.cockroachlabs.cloud'}, {'node_region': 'us-east1', 'node_id': 'sixear-gundi-10233.jxf.gcp-us-east1.cockroachlabs.cloud'}, {'node_region': 'us-west2', 'node_id': 'sixear-gundi-10233.jxf.gcp-us-west2.cockroachlabs.cloud'}]}})
             } catch (err) {
                 console.error('Error fetching data:', err);
@@ -45,7 +46,7 @@ export default function AdminDash() {
         fetchData();
     }, []);
 
-    //CockroachDB Free cluster automatically backups data. So what we are doing for Project purpose is displaying a List of Buckets from Google Cloud Storage directly here. 
+    //CockroachDB Free cluster automatically backups data. So can't use this feature.
     // const handleBackup = () => {
       
         
@@ -75,6 +76,8 @@ export default function AdminDash() {
                         </button> */}
                     </div>
                 </div>
+
+                
 
 
                 {/* Summary Cards */}

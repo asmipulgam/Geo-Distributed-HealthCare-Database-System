@@ -27,18 +27,15 @@ export default function Agent() {
             setPrevCursor(pRes.prevIndex ?? null);
             setCount(pRes.count ?? 0);
             setOffset(pRes.offset ?? 0);
-            // capture query timing reported by backend (milliseconds)
             try {
                 const qm = (pRes.metrics && (pRes.metrics.select_time_ms ?? pRes.metrics.elapsed_ms)) ?? pRes.elapsed_ms ?? null;
                 setQueryMs(qm !== undefined ? qm : null);
             } catch (e) {
                 setQueryMs(null);
             }
-            // Use server-reported `used_region` if present (provenance)
             setFetchedFrom(pRes.used_region ?? region);
         } catch {
             console.error("Issue fetching paginated data");
-            // Let server-side fault tolerance handle retries. Show no change to `fetchedFrom`.
         } finally {
             setLoading(false);
         }
@@ -46,9 +43,7 @@ export default function Agent() {
 
 
     useEffect(() => {
-        // call directly — fetchRecords doesn't need to be listed as a dependency
         fetchRecords(0, "next");
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [region]);
 
     return (

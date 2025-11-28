@@ -11,25 +11,26 @@ import threading
 import os
 import multiprocessing
 import warnings
-
 from CloudClient import CloudClient
-
+from health_check import ClusterHealthMonitor
+from flask import send_file
 from datetime import datetime
 import math
 
-
+# This is the entry point of the flask server. We are using flask to create the backend due to simple architecture and logic
 app = Flask(__name__)
 
 RECENT_METRICS = []
 
-# Keeping references to running Replicator instances so we can stop them on shutdown
+#As mentioned in report, we will replicate data to from west and central to east and (vice versa if there is a downtime), Storing global variables for instance reference
 REPLICATORS = []
+HEALTH_MONITOR = None
 
 
-# Avoid CORS Issues
+# We are running backend and frontend on same machine even for demo right, So avoiding any potentials CORS issues which can block communication
+# Should be avoided in production hostong as can cause abuse of systems.
 @app.before_request
 def _handle_options():
-    # Respond to preflight OPTIONS requests
     if request.method == "OPTIONS":
         resp = app.make_response(("", 200))
         resp.headers["Access-Control-Allow-Origin"] = "*"
@@ -50,19 +51,18 @@ def _add_cors_headers(response):
     return response
 
 
-
-#Default Flask Endpoint
+#The below are three are default flask generated endpoints from builder template. Kept it as ease. No use in our project.
 @app.get("/ping")
 def ping():
     return jsonify({"status": "ok", "message": "pong"}), 200
 
-#Default Flask Endpoint
+
 @app.get("/greet")
 def greet():
     name = request.args.get("name", "world")
     return jsonify({"greeting": f"Hello, {name}!"}), 200
 
-#Default Flask Endpoint
+
 @app.post("/echo")
 def echo():
     if request.is_json:
@@ -71,24 +71,21 @@ def echo():
         data = request.form.to_dict(flat=True)
     return jsonify({"received": data}), 200
 
+#User login endpoint. When user enters his ID, State and DOB , he will come to a screen where his details are mentioned.
 @app.post("/api/getcustomer")
 def getCustomer():
     data = request.json
     try:
-        # Expect a JSON object with an 'id' field
         customer_id = data.get("id")
         state = data.get("state")
         print(f"Fetching customer with ID: {customer_id} and state: {state}")
         customer_data = db.fetchUserData(customer_id, state)
         status = 200
-        print("CD",customer_data)
-        # db.fetchUserData may return (dict, status) for not-found
         if isinstance(customer_data, tuple) and len(customer_data) == 2:
             payload, status = customer_data
         else:
             payload = customer_data
 
-        # Record metrics if present
         try:
             if isinstance(payload, dict) and payload.get("metrics"):
                 m = payload.get("metrics")
@@ -97,9 +94,7 @@ def getCustomer():
                     "endpoint": "getcustomer",
                     "region": state,
                     "customer_id": customer_id,
-                    # keep raw metrics for debugging
                     "metrics": m,
-                    # normalize common fields for UI
                     "rows": int(m.get('rows')) if isinstance(m.get('rows'), (int, float)) else (m.get('rows') or None),
                     "elapsed_ms": int(m.get('select_time_ms')) if m.get('select_time_ms') is not None else (m.get('elapsed_ms') if m.get('elapsed_ms') is not None else None),
                 }
@@ -115,15 +110,13 @@ def getCustomer():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-
+#Simple Crate endpoint in CRUD REST API strategy.
 @app.post("/api/admin/create")
 def addData():
     data = request.json
     try:
-        # Expect a JSON object representing a single patient row
         print(data)
         res = db.insert_patient_new(data)
-        # If insert returned metrics, record them
         try:
             if isinstance(res, dict) and res.get("metrics"):
                 m = res.get("metrics")
@@ -132,7 +125,6 @@ def addData():
                     "endpoint": "insert_patient",
                     "payload_region": data.get("Region") or data.get("State") or data.get("region"),
                     "metrics": m,
-                    # normalize fields
                     "rows": int(m.get('rows')) if isinstance(m.get('rows'), (int, float)) else (m.get('rows') or None),
                     "elapsed_ms": int(m.get('select_time_ms')) if m.get('select_time_ms') is not None else (m.get('elapsed_ms') if m.get('elapsed_ms') is not None else None),
                 }
@@ -141,20 +133,15 @@ def addData():
                     RECENT_METRICS.pop()
         except Exception:
             pass
-
-        # Forward the DB client's response to caller
         return jsonify(res), 200
     except Exception as e:
         print(e)
         return jsonify({"status": "error", "message": str(e)}), 500
 
-
+# TODO(REMOVE)
+# HealthCheck endpoint to reload DB connections based on current network changes
 @app.post('/admin/reload-connections')
 def admin_reload_connections():
-    """Admin endpoint to close and re-open DB connections based on current
-    `LOCAL_URLS` and `/etc/hosts` changes. Returns a JSON report indicating
-    which regions are reachable.
-    """
     global db
     try:
         if 'db' not in globals() or db is None:
@@ -165,6 +152,10 @@ def admin_reload_connections():
         return jsonify({"status": "error", "message": str(e)}), 500
     
 
+# This endpoint will fetch node details from CockroachDB Cloud API for the admin page.
+# We tried making it similar to local cockroachDB cluster admin UI but due to limitations on the free tier (dedicated and standard paid tiers have more features)
+# We can't show any more useful information than this. But in production environments, A paid tier will add more monitoring and metrics capabiltiies with custom 
+# Backup Schedules, etc
 @app.get("/api/nodes")
 def api_nodes():
     """Fetch cluster and node status from NODE_BACKEND_URL and return to caller."""
@@ -183,13 +174,13 @@ def api_all():
     """Return paginated patients rows.
 
     Query params:
-      - region: one of 'west','east','central' (affects DSN)
-      - cursor: integer offset (default 0)
-      - dir: 'next' or 'prev' (default 'next')
-      - page_size: optional page size (default 20)
+      - region: one of 'west','east','central' get from where
+      - cursor: integer offset (default 0) starting offset value , 0.20,40, etc
+      - dir: 'next' or 'prev' (default 'next') Go back or next set of records
+      - page_size: set to 20, Feel free to modify
     """
     if FetchAll is None:
-        return jsonify({"error": "fetchall helper not available"}), 500
+        return jsonify({"error": "Some issue. Data not available"}), 500
 
     region = request.args.get("region", "west")
     try:
@@ -201,14 +192,7 @@ def api_all():
         page_size = int(request.args.get("page_size", 20))
     except Exception:
         page_size = 20
-
-    # Determine logical table name based on the requested region. We want to
-    # query the logical patients table for the requested region (e.g. when
-    # requesting 'us-west' we should query `patients_west`) even if the actual
-    # DSN we connect to is a backup (e.g. us-east).
     table_name = ('patients_west' if 'west' in str(region) else 'patients_central')
-
-    # Resolve the DSN we'll use for this request (may be primary or a backup).
     used_region = region
     used_dsn = None
     try:
@@ -221,7 +205,6 @@ def api_all():
     if used_region_resolved:
         used_region = used_region_resolved
 
-    # Map resolved region to a DSN (fall back to the logical region's configured URL)
     used_dsn = db.getURL({"region": used_region}) or db.getURL({"region": region})
     try:
         if created_tmp and conn_for_region is not None:
@@ -232,7 +215,6 @@ def api_all():
     fetcher = FetchAll(dsn=used_dsn)
     fetcher.table_name = table_name
 
-    # Helper to record metrics consistently
     def _record_page_metrics(page_obj, used_region_val):
         try:
             m = page_obj.get("metrics")
@@ -251,11 +233,10 @@ def api_all():
                 if len(RECENT_METRICS) > 50:
                     RECENT_METRICS.pop()
         except Exception:
-            pass
+            print(e)
 
     try:
         page = fetcher.fetch(cursor=cursor, dir=dir, page_size=page_size)
-        # Attach used_region to the response so clients know where the data came from
         try:
             if isinstance(page, dict):
                 page['used_region'] = used_region
@@ -265,16 +246,13 @@ def api_all():
         return jsonify(page), 200
     except Exception as e:
         print(f"Primary fetch failed (dsn={used_dsn}): {e}")
-        # Attempt a targeted fallback: try the configured backup DSN for the
-        # requested logical region and re-run the same logical-table query.
         try:
-            backup_token = db.__getReplicaURL({"region": region})
+            ft_replica_URL = db.__getReplicaURL({"region": region})
         except Exception:
-            backup_token = None
+            ft_replica_URL = None
 
-        if backup_token:
-            # If backup_token is a region key, resolve to its configured URL
-            backup_dsn = db.getURL({"region": backup_token}) or backup_token
+        if ft_replica_URL:
+            backup_dsn = db.getURL({"region": ft_replica_URL}) or ft_replica_URL
             try:
                 alt_fetcher = FetchAll(dsn=backup_dsn)
                 alt_fetcher.table_name = table_name
@@ -282,20 +260,18 @@ def api_all():
                     page2 = alt_fetcher.fetch(cursor=cursor, dir=dir, page_size=page_size)
                     try:
                         if isinstance(page2, dict):
-                            page2['used_region'] = backup_token
+                            page2['used_region'] = ft_replica_URL
                     except Exception:
                         pass
-                    _record_page_metrics(page2, backup_token)
+                    _record_page_metrics(page2, ft_replica_URL)
                     return jsonify(page2), 200
                 finally:
                     try:
                         alt_fetcher.close()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        print(f"Error closing cursor: {e}")
             except Exception as e2:
-                print(f"Fallback fetch also failed (backup={backup_token}): {e2}")
-
-        # No fallback succeeded — return original error
+                print(f"Fallback Fault Tolerance Connection also failed (backup={ft_replica_URL}): {e2}")
         return jsonify({"error": str(e)}), 500
     finally:
         try:
@@ -304,23 +280,53 @@ def api_all():
             pass
 
 
+# Get recorded metrics
 @app.get("/api/metrics")
 def api_metrics():
-    """Return recent query metrics collected from /api/all.
-
-    This is a lightweight in-memory store for demonstration only.
-    """
     return jsonify({"metrics": RECENT_METRICS}), 200
 
 
+@app.get('/api/availability')
+def api_availability():
+    """Return recent availability metrics sampled by the health monitor.
+
+    Optional query param `since` in seconds to filter recent samples.
+    """
+    global HEALTH_MONITOR
+    if HEALTH_MONITOR is None:
+        return jsonify({'error': 'health monitor not running'}), 500
+    try:
+        since = request.args.get('since')
+        since_sec = int(since) if (since is not None and str(since).strip() != '') else None
+    except Exception:
+        since_sec = None
+    data = HEALTH_MONITOR.get_metrics(since_seconds=since_sec)
+    return jsonify({'metrics': data}), 200
+
+
+@app.get('/api/availability/graph')
+def api_availability_graph():
+    """Return a PNG availability graph generated from the health monitor's samples."""
+    global HEALTH_MONITOR
+    if HEALTH_MONITOR is None:
+        return jsonify({'error': 'health monitor not running'}), 500
+    # generate graph into default path
+    out = HEALTH_MONITOR.generate_graph()
+    if not out:
+        return jsonify({'error': 'graph generation not available'}), 500
+    try:
+        return send_file(out, mimetype='image/png')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# This is an admin search query which performs distributed query with custom filters across cluster regions
 @app.post('/api/search')
 def api_search():
-    """Accepts JSON body: { region: 'us-west', filters: [{col,op,val}, ...], limit: 1000 }
-    Returns { records: [...] }
+    """{ region: 'us-west', filters: [{col,op,val}, ...], limit: 1000 }
+     { records: [...] }
     """
     try:
         body = request.get_json(silent=True) or {}
-        # Accept either a single `region` or multiple `regions` (list)
         region = body.get('region')
         regions = body.get('regions') or ([] if region is None else [region])
         filters = body.get('filters') or []
@@ -328,42 +334,31 @@ def api_search():
 
         t0 = time.time()
         rows = []
-        # Determine per-region fetch size. We distribute the requested `limit` across selected
-        # regions to avoid over-fetching. Each physical DB has a hard cap of 90000 records.
         req_limit = int(limit)
         num_regions = max(1, len(regions))
         per_region_limit = max(1, math.ceil(req_limit / num_regions))
-        # Cap per-region fetch size to physical DB limit
         per_region_limit = min(90000, per_region_limit)
-
-        # Query each requested region and aggregate results. We will truncate the combined
-        # results to the requested overall `limit` before returning.
         per_region_timings = []
         for r in regions:
             try:
                 t_region = time.time()
                 part = db.search_patients(filters=filters, region=r, limit=per_region_limit)
                 region_elapsed_ms = int((time.time() - t_region) * 1000)
-                # count rows returned for this region
                 part_count = len(part) if isinstance(part, (list, tuple)) else (1 if part is not None else 0)
                 per_region_timings.append({
                     'region': r,
                     'elapsed_ms': region_elapsed_ms,
                     'rows': part_count,
                 })
-
-                # ensure we tag origin region so the UI can show provenance
                 if isinstance(part, (list, tuple)):
                     for pr in part:
                         if isinstance(pr, dict):
-                            # If the row already has Region/region, leave it; otherwise set `__source_region`
                             if not (pr.get('Region') or pr.get('region')):
                                 pr['__source_region'] = r
                             rows.append(pr)
                         else:
                             rows.append(pr)
             except Exception as e:
-                # ignore region errors but continue with others
                 print(f"Warning: search failed for region {r}: {e}")
                 per_region_timings.append({
                     'region': r,
@@ -374,11 +369,8 @@ def api_search():
 
         elapsed_ms = int((time.time() - t0) * 1000)
 
-        # Truncate combined results to requested overall limit for stable UI
         if isinstance(rows, list) and len(rows) > req_limit:
             rows = rows[:req_limit]
-
-        # record a lightweight metric entry including per-region timings
         try:
             entry = {
                 'timestamp': datetime.utcnow().isoformat() + 'Z',
@@ -403,16 +395,9 @@ def api_search():
 
 @app.post('/api/organ_search')
 def api_organ_search():
-    """Endpoint to find potential donors near a hospital.
-
-    Expected body: { hospital: { id,name,address,lat,lng,region,state }, organ: str, age_min?, age_max? }
-    The handler will query the appropriate region DB (using hospital.region) and filter by State
-    and optional age range. Returns top 5 matching patient rows.
-    """
     try:
         body = request.get_json(silent=True) or {}
         hospital = body.get('hospital') or {}
-        # donor-only search uses boolean field `is_organ_donor` in patients
         donor_only = body.get('donor_only', True)
         age_min = body.get('age_min')
         age_max = body.get('age_max')
@@ -424,13 +409,11 @@ def api_organ_search():
         if state:
             filters.append({'col': 'State', 'op': '=', 'val': state})
         if donor_only:
-            # boolean match
             filters.append({'col': 'is_organ_donor', 'op': '=', 'val': True})
         if age_min is not None:
             filters.append({'col': 'Age', 'op': '>=', 'val': age_min})
         if age_max is not None:
             filters.append({'col': 'Age', 'op': '<=', 'val': age_max})
-        # perform search on region DB, limit to 5; if hospital coords present, pass them for proximity search
         try:
             center_lat = hospital.get('lat')
             center_lon = hospital.get('lng') or hospital.get('lon')
@@ -443,8 +426,6 @@ def api_organ_search():
         except Exception as e:
             print('organ_search db error:', e)
             return jsonify({'error': str(e)}), 500
-
-        # record metric (include elapsed_ms and rows)
         try:
             entry = {
                 'timestamp': datetime.utcnow().isoformat() + 'Z',
@@ -466,13 +447,9 @@ def api_organ_search():
         return jsonify({'error': str(e)}), 500
 
 
+# Created this to display an analytics dashboard with charts, etc so that some visualization on distributed qyery can be performed
 @app.get('/api/analytics/summary')
 def api_analytics_summary():
-    """Run simple distributed queries across west and central and return merged stats.
-
-    Query params:
-      - per_region_limit: max rows to fetch per region for aggregation/sample (default 500)
-    """
     try:
         per_region_limit = int(request.args.get('per_region_limit', 500))
     except Exception:
@@ -524,18 +501,19 @@ def api_analytics_summary():
     }), 200
 
 def initReplicators():
-    # Create Replicator instances that run their internal replication logic
-    # by providing the DB client and source/target regions. The Replicator
-    # will forward the regions to its internal routine and use the client's
-    # URL mapping to connect to source and target DBs.
-    # replicator_east = Replicator(
-    #     lambda: None,
-    #     db_client=db,
-    #     source_region="us-east",
-    #     target_regions=["us-central", "us-west"],
-    #     interval=1.5,
-    #     run_on_start=True,
-    # )
+    #Our replicator logic as explained in report should be that all changes to central and west be replicated to backup/replica cluster
+    # in east. But if due to fault west or central is down, then east will be primary cluster for that region and all data be forwarded to east. When west/central - the downed instance
+    # comes backup, then get any changes during its downtime from east and apply to itself.
+    global REPLICATOR_CENTRAL, REPLICATOR_MONITOR_THREAD
+
+    replicator_east = Replicator(
+        lambda: None,
+        db_client=db,
+        source_region="us-east",
+        target_regions=["us-central", "us-west"],
+        interval=1.5,
+        run_on_start=True,
+    )
     replicator_west = Replicator(
         lambda: None,
         db_client=db,
@@ -544,32 +522,77 @@ def initReplicators():
         interval=1.5,
         run_on_start=True,
     )
-    # replicator_central = Replicator(
-    #     lambda: None,
-    #     db_client=db,
-    #     source_region="us-central",
-    #     target_regions=["us-east"],
-    #     interval=1.5,
-    #     run_on_start=True,
-    # )
-    #replicator_east.start()
+    replicator_central = Replicator(
+        lambda: None,
+        db_client=db,
+        source_region="us-central",
+        target_regions=["us-east"],
+        interval=1.5,
+        run_on_start=False,
+    )
+
+    replicator_east.start()
     replicator_west.start()
-    # remember the replicator so we can stop it on process exit
+    REPLICATORS.append(replicator_east)
+    REPLICATORS.append(replicator_west)
+
+    REPLICATOR_CENTRAL = replicator_central
+
+    def _central_monitor(poll_interval=5.0):
+        print("Central replicator monitor started")
+        while True:
+            if getattr(shutdown_replicators, 'in_progress', False):
+                break
+            try:
+                statuses = {}
+                try:
+                    statuses = db.reload_connections()
+                except Exception as e:
+                    print("Error checking connections for monitor:", e)
+
+                west_ok = statuses.get('us-west', {}).get('ok', False)
+                east_ok = statuses.get('us-east', {}).get('ok', False)
+
+                central_running = getattr(REPLICATOR_CENTRAL, '_started', False)
+
+
+                if not (west_ok and east_ok):
+                    if not central_running:
+                        try:
+                            REPLICATOR_CENTRAL.start()
+                            REPLICATOR_CENTRAL._started = True
+                            REPLICATORS.append(REPLICATOR_CENTRAL)
+                            print("Started central replicator due to region outage")
+                        except Exception as e:
+                            print("Failed to start central replicator:", e)
+                else:
+
+                    if central_running:
+                        try:
+                            REPLICATOR_CENTRAL.stop()
+                        except Exception as e:
+                            print("Failed to stop central replicator:", e)
+                        try:
+                            REPLICATORS.remove(REPLICATOR_CENTRAL)
+                        except Exception:
+                            pass
+                        REPLICATOR_CENTRAL._started = False
+                        print("Stopped central replicator: all regions healthy")
+            except Exception as e:
+                print("Central replicator monitor encountered error:", e)
+            time.sleep(poll_interval)
+
+
     try:
-        REPLICATORS.append(replicator_west)
-    except Exception:
-        pass
-    #replicator_central.start()
-    print("Replicators initialized and started.")
+        REPLICATOR_MONITOR_THREAD = threading.Thread(target=_central_monitor, args=(5.0,), daemon=True)
+        REPLICATOR_MONITOR_THREAD.start()
+    except Exception as e:
+        print("Failed to start central monitor thread:", e)
+
+    print("Replicators initialized (central managed by monitor).")
 
 
 def shutdown_replicators(signum=None, frame=None):
-    """Stop any running Replicator instances. Safe to call multiple times.
-
-    Registered as a signal handler for SIGINT/SIGTERM and with `atexit`.
-    Accepts optional (signum, frame) so it can be used as a handler.
-    """
-    # Prevent re-entrancy
     if getattr(shutdown_replicators, 'in_progress', False):
         print("Shutdown already in progress; ignoring additional signal")
         return
@@ -577,7 +600,6 @@ def shutdown_replicators(signum=None, frame=None):
 
     print(f"Shutting down replicators (signal={signum})...")
 
-    # Start a watchdog that will forcibly kill the process after a timeout
     def _force_kill_after(timeout_sec=30):
         try:
             time.sleep(timeout_sec)
@@ -594,38 +616,37 @@ def shutdown_replicators(signum=None, frame=None):
                     pass
         except Exception:
             pass
-
-        # Suppress noisy resource_tracker warning if leftover semaphores exist
-        try:
-            warnings.filterwarnings("ignore", message=r"resource_tracker: There appear to be .* leaked semaphore objects to clean up at shutdown")
-        except Exception:
-            pass
-
-        # Use os._exit to avoid any stuck cleanup hooks; this is last-resort
+        #Force exit
         os._exit(1)
 
     watcher = threading.Thread(target=_force_kill_after, args=(30,), daemon=True)
     watcher.start()
 
-    # Attempt graceful stop of known replicators
     for rep in list(REPLICATORS):
         try:
-            # If the Replicator exposes a stop(timeout) API, use it; otherwise call stop()
             try:
                 rep.stop(timeout=5)
             except TypeError:
-                # fallback if stop() doesn't accept timeout
                 rep.stop()
         except Exception as e:
             print("Error stopping replicator:", e)
-
-    # Allow a short grace period for threads to finish
     try:
         time.sleep(1)
     except Exception:
         pass
 
     REPLICATORS.clear()
+
+    # Stop health monitor if present
+    try:
+        global HEALTH_MONITOR
+        if HEALTH_MONITOR is not None:
+            try:
+                HEALTH_MONITOR.stop(join=False)
+            except Exception:
+                pass
+    except Exception:
+        pass
 
     print("Shutdown actions complete — exiting process.")
     # Exit immediately; watcher will force-exit if this fails
@@ -652,7 +673,6 @@ def fetchClusterDetails():
 if __name__ == "__main__":
     #Run the Flask development server
     db = DBClient()
-    # Register signal handlers and atexit to ensure replicators are stopped
     try:
         signal.signal(signal.SIGINT, shutdown_replicators)
         signal.signal(signal.SIGTERM, shutdown_replicators)
@@ -666,12 +686,25 @@ if __name__ == "__main__":
     except Exception:
         pass
 
-    #initReplicators()
+    initReplicators()
     print("Client initialized")
     #These are for direct loading of data at initial point
     #db.loadDoctorData(db.connections["us-west"])
     #db.loadLocalData(db.connections["us-east"])
     fetchClusterDetails()
+    # Start health monitor using configured DSNs
+    try:
+        dsns = {
+            'us-west': db.getURL({'region': 'us-west'}),
+            'us-central': db.getURL({'region': 'us-central'}),
+            'us-east': db.getURL({'region': 'us-east'}),
+        }
+        HEALTH_MONITOR = ClusterHealthMonitor(dsns, sample_interval=5.0, retention_minutes=60)
+        HEALTH_MONITOR.start()
+        print('Health monitor started')
+    except Exception as e:
+        print('Failed to start health monitor:', e)
+
     app.run(host="0.0.0.0", port=5010, debug=True)
     
     

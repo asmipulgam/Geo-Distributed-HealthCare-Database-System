@@ -2,6 +2,9 @@ import psycopg2
 import configparser
 import time
 
+#Created this to manually take backup and upload to GCS
+#Unfortunately for CokckroachDB Free tier, Backup is automated and stored on their own server with no user control
+# Hence unable to implement this feature effectively
 class Backup:
     def __init__(self, dsn: str):
         self.dsn = dsn
@@ -30,10 +33,6 @@ class Backup:
         
 
     def create_backup(self, region) -> None:
-        """
-        Create a backup of the database to the specified location.
-        :param backup_name: The name/location of the backup.
-        """
         backup_name = self.__getBackupPath()
         with psycopg2.connect(self.dsn) as conn:
            with conn.cursor() as cur:
@@ -41,10 +40,6 @@ class Backup:
         conn.close()
 
     def restore_backup(self, backup_name: str) -> None:
-        """
-        Restore the database from the specified backup.
-        :param backup_name: The name/location of the backup.
-        """
         with psycopg2.connect(self.dsn) as conn:
             with conn.cursor() as cur:
                 cur.execute(f"RESTORE FROM '{backup_name}';")

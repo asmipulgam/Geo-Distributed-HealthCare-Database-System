@@ -58,7 +58,6 @@ export default function AdminSearch() {
         function unwrap(r) {
             if (!r) return r;
             if (Array.isArray(r) && r.length > 0 && typeof r[0] === 'object') return r[0];
-            // if r has a single key whose value is an object, unwrap that
             const keys = Object.keys(r || {});
             if (keys.length === 1 && typeof r[keys[0]] === 'object') return r[keys[0]];
             return r;
@@ -86,8 +85,6 @@ export default function AdminSearch() {
         for (const v of variants) {
             if (v && Object.prototype.hasOwnProperty.call(src, v)) return src[v];
         }
-
-        // fall back to fuzzy matching of keys (ignore non-alphanum and case)
         for (const k of Object.keys(src)) {
             const nk = String(k).replace(/[^a-z0-9]/gi, '').toLowerCase();
             if (nk === normalizedCol) return src[k];
@@ -99,11 +96,9 @@ export default function AdminSearch() {
    
 
     function formatCellValue(v) {
-        // Ensure booleans are visible in the table (React doesn't render boolean false)
         if (v === true) return 'Yes';
         if (v === false) return 'No';
         if (v === null || v === undefined) return '';
-        // For objects/arrays, try JSON preview for debug; otherwise toString
         if (typeof v === 'object') {
             try { return JSON.stringify(v); } catch { return String(v); }
         }

@@ -3,13 +3,9 @@ import { useMemo, useState } from 'react'
 import '../login.css'
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import { BACKEND_URL } from './constants';
+import { BACKEND_URL, US_STATES } from './constants';
 
 const bgImage = "/src/assets/Background.png";
-
-function isDigits(str) {
-  return /^\d+$/.test(str)
-}
 
 function parseYYYYMMDD(str) {
   // Accepts YYYY-MM-DD strictly
@@ -20,7 +16,6 @@ function parseYYYYMMDD(str) {
   const monthIndex = Number(mo) - 1
   const day = Number(d)
   const dt = new Date(Date.UTC(year, monthIndex, day))
-  // Basic sanity: month/day preserved
   if (
     dt.getUTCFullYear() !== year ||
     dt.getUTCMonth() !== monthIndex ||
@@ -46,59 +41,6 @@ export default function Login() {
     if (healthId.length < 9) return 'Health ID must be at least 6 digits with prefix PT-'
     return null
   }, [healthId])
-
-  const US_STATES = {
-    'AL': 'Alabama',
-    'AK': 'Alaska',
-    'AZ': 'Arizona',
-    'AR': 'Arkansas',
-    'CA': 'California',
-    'CO': 'Colorado',
-    'CT': 'Connecticut',
-    'DE': 'Delaware',
-    'FL': 'Florida',
-    'GA': 'Georgia',
-    'HI': 'Hawaii',
-    'ID': 'Idaho',
-    'IL': 'Illinois',
-    'IN': 'Indiana',
-    'IA': 'Iowa',
-    'KS': 'Kansas',
-    'KY': 'Kentucky',
-    'LA': 'Louisiana',
-    'ME': 'Maine',
-    'MD': 'Maryland',
-    'MA': 'Massachusetts',
-    'MI': 'Michigan',
-    'MN': 'Minnesota',
-    'MS': 'Mississippi',
-    'MO': 'Missouri',
-    'MT': 'Montana',
-    'NE': 'Nebraska',
-    'NV': 'Nevada',
-    'NH': 'New Hampshire',
-    'NJ': 'New Jersey',
-    'NM': 'New Mexico',
-    'NY': 'New York',
-    'NC': 'North Carolina',
-    'ND': 'North Dakota',
-    'OH': 'Ohio',
-    'OK': 'Oklahoma',
-    'OR': 'Oregon',
-    'PA': 'Pennsylvania',
-    'RI': 'Rhode Island',
-    'SC': 'South Carolina',
-    'SD': 'South Dakota',
-    'TN': 'Tennessee',
-    'TX': 'Texas',
-    'UT': 'Utah',
-    'VT': 'Vermont',
-    'VA': 'Virginia',
-    'WA': 'Washington',
-    'WV': 'West Virginia',
-    'WI': 'Wisconsin',
-    'WY': 'Wyoming'
-  };
 
   const [state, setState] = useState('')
   const [stateTouched, setStateTouched] = useState(false)
